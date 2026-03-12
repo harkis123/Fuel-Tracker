@@ -63,6 +63,7 @@ def fetch_orlen_pl():
 # ═══════════════════════════════════════
 def fetch_orlen_lt():
     try:
+        # 1. Gauname PDF nuorodas
         list_url = "https://www.orlenlietuva.lt/lt/wholesale/_layouts/f2hPriceTable/default.aspx"
         r = requests.get(list_url, headers=H, timeout=20)
         r.raise_for_status()
@@ -71,96 +72,64 @@ def fetch_orlen_lt():
         pdf_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if ".pdf" in href.lower() and ("kainos" in href.lower() or "realizacija" in href.lower()):
+            if ".pdf" in href.lower() and "realizacija" in href.lower():
                 if not href.startswith("http"):
                     href = "https://www.orlenlietuva.lt" + href
-                pdf_links.append(href.replace(" ", "%20")) # Sutvarkome tarpus URL
-        
-        # Jei neradome nuorodų puslapyje, bandom sugeneruoti pagal datą (kaip fallback)
-        if not pdf_links:
-            for days_back in range(7):
-                d = TODAY - timedelta(days=days_back)
-                pdf_links.append(f"https://www.orlenlietuva.lt/LT/Wholesale/Prices/Kainos%20{d.strftime('%Y%%20%m%%20%d')}%%20realizacija%%20internet.pdf")
+                pdf_links.append(href.replace(" ", "%20"))
 
-        for pdf_url in pdf_links[:5]:
+        # 2. Tikriname naujausius PDF
+        for pdf_url in pdf_links[:3]:
+            log("Orlen LT", f"Tikriname: {pdf_url}")
             try:
-                log("Orlen LT", f"Tikrinamas PDF: {pdf_url}")
                 r2 = requests.get(pdf_url, headers=H, timeout=15)
-                if r2.status_code == 200 and len(r2.content) > 500:
+                if r2.status_code == 200:
                     price = parse_orlen_lt_pdf(r2.content)
                     if price: return price
-            except: continue
-            
-        log("Orlen LT", "Kaina nerasta nei viename PDF", "WARN")
+            except Exception as e:
+                log("Orlen LT", f"Nepavyko nuskaityti konkretaus PDF: {e}", "WARN")
+                continue
+        
         return None
     except Exception as e:
-        log("Orlen LT", str(e), "ERROR"); return None
+        log("Orlen LT", f"Kritinė klaida: {e}", "ERROR")
+        return None
 
 def parse_orlen_lt_pdf(pdf_bytes):
     try:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             for page in pdf.pages:
-                tables = page.extract_tables()
-                for table in tables:
-                    for row in table:
-                        if not row: continue
-                        # Sujungiam visas eilutės ląsteles į vieną tekstą paieškai
-                        row_text = " ".join([str(c) for c in row if c]).lower()
-                        
-                        if "dyzelinas" in row_text and ("e kl" in row_text or "rrme" in row_text):
-                            # Išvalome langelius ir sudedame skaičius į sąrašą
-                            raw_values = []
-                            for cell in row:
-                                if cell:
-                                    # Pašaliname viską išskyrus skaičius ir tašką/kablelį
-                                    clean = re.sub(r'[^\d.,]', '', str(cell).replace(",", "."))
-                                    if clean and clean != ".":
-                                        raw_values.append(clean)
-                            
-                            # Logika: Jei kaina "1 801.40" suskilo į "1" ir "801.40", jas sujungiame
-                            full_numbers = []
-                            i = 0
-                            while i < len(raw_values):
-                                val = raw_values[i]
-                                # Jei skaičius yra "1" arba "2" ir po jo eina skaičius su šimtais (pvz "801.40")
-                                if (val in ["1", "2"]) and (i + 1 < len(raw_values)) and ("." in raw_values[i+1]):
-                                    full_numbers.append(float(val + raw_values[i+1]))
-                                    i += 2
-                                else:
-                                    try: full_numbers.append(float(val))
-                                    except: pass
-                                    i += 1
-                            
-                            # Ieškome didžiausios vertės (tai bus kaina su PVM)
-                            valid_prices = [p for p in full_numbers if 1000 < p < 3000]
-                            if valid_prices:
-                                final_price = max(valid_prices)
-                                eur_l = final_price / 1000
-                                log("Orlen LT", f"SĖKMĖ! Rasta kaina su PVM: {final_price} EUR/1000l")
-                                return {"price_eur_l": round(eur_l, 4)}
-                                
+                text = page.extract_text()
+                if not text: continue
+                
+                # Šis Regex ieško "Dyzelinas E kl. su RRME" ir paima kainą, 
+                # net jei tarp skaičių yra tarpai (pvz., 1 801.40)
+                pattern = r"Dyzelinas\s+E\s+kl\.\s+su\s+RRME.*?(\d[\s\xa0]?\d{3}[.,]\d{2})"
+                match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                
+                if match:
+                    raw_price = match.group(1)
+                    # Išvalome viską: tarpus, kablelius paverčiame taškais
+                    clean_price = re.sub(r'[^\d.]', '', raw_price.replace(",", "."))
+                    val = float(clean_price)
+                    
+                    if 1000 < val < 2500:
+                        log("Orlen LT", f"SĖKMĖ: Rasta kaina {val} EUR/1000l")
+                        return {"price_eur_l": round(val / 1000, 4)}
+                
+                # Jei Regex nerado, bandom paprastesnį variantą eilutė po eilutės
+                lines = text.split('\n')
+                for i, line in enumerate(lines):
+                    if "dyzelinas" in line.lower() and "rrme" in line.lower():
+                        # Ieškome skaičiaus šioje arba kitoje eilutėje
+                        combined = line + (lines[i+1] if i+1 < len(lines) else "")
+                        prices = re.findall(r'(\d[\s\xa0]?\d{3}[.,]\d{2})', combined)
+                        if prices:
+                            val = float(re.sub(r'[^\d.]', '', prices[0].replace(",", ".")))
+                            log("Orlen LT", f"SĖKMĖ (atsarginis būdas): {val}")
+                            return {"price_eur_l": round(val / 1000, 4)}
     except Exception as e:
-        log("Orlen LT", f"PDF klaida: {e}", "WARN")
-    return None
-
-def find_lt_diesel_in_text(text):
-    """Fallback text search for Orlen LT diesel price"""
-    # Look for pattern: Dyzelinas E ... number around 1500-2000 (EUR/1000l with VAT)
-    patterns = [
-        r'[Dd]yzelinas\s+E[^0-9]{0,150}?(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})',
-        r'su\s+PVM[^0-9]{0,50}?(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})',
-        r'(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})[^0-9]{0,30}su\s+PVM',
-    ]
-    for pat in patterns:
-        matches = re.findall(pat, text, re.IGNORECASE)
-        for m in matches:
-            clean_val = re.sub(r'[^\d,.]', '', m).replace(",", ".")
-            val = float(clean_val)
-            if 1000 < val < 2500:  # EUR/1000l range
-                eur_l = val / 1000
-                log("Orlen LT", f"Text: {val} EUR/1000l → {eur_l:.3f} EUR/l")
-                return {"price_eur_l": round(eur_l, 4)}
+        log("Orlen LT", f"PDF analizės klaida: {e}", "WARN")
     return None
 
 # ═══════════════════════════════════════
