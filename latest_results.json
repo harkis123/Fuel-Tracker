@@ -10,12 +10,11 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2523,
-      "SEK_EUR": 10.6543,
-      "date": "2026-03-11"
+      "PLN_EUR": 4.2578,
+      "SEK_EUR": 10.7108
     },
     "elvis_de": {
-      "price_eur_l": 2.104
+      "price_eur_l": 2.086
     },
     "bsh_se": {
       "price_sek_l": 20.49
