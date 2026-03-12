@@ -2,8 +2,8 @@
   "date": "2026-03-12",
   "results": {
     "fx": true,
-    "orlen_pl": false,
-    "orlen_lt": false,
+    "orlen_pl": true,
+    "orlen_lt": true,
     "elvis_de": true,
     "bsh_se": true,
     "eu_bulletin": false
@@ -12,6 +12,12 @@
     "fx": {
       "PLN_EUR": 4.2578,
       "SEK_EUR": 10.7108
+    },
+    "orlen_pl": {
+      "price_pln_m3": 6192.0
+    },
+    "orlen_lt": {
+      "price_eur_l": 1.1128
     },
     "elvis_de": {
       "price_eur_l": 2.086
