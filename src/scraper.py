@@ -109,7 +109,9 @@ def parse_orlen_lt_pdf(pdf_bytes):
                             for cell in row:
                                 if cell is None: continue
                                 try:
-                                    val = float(str(cell).replace(",", ".").replace(" ", ""))
+                                    clean_cell = re.sub(r'[^\d.,]', '', str(cell).replace(",", "."))
+                                    if not clean_cell: continue
+                                    val = float(clean_cell)
                                     if val > 0: prices.append(val)
                                 except: continue
                             
@@ -143,14 +145,15 @@ def find_lt_diesel_in_text(text):
     """Fallback text search for Orlen LT diesel price"""
     # Look for pattern: Dyzelinas E ... number around 1500-2000 (EUR/1000l with VAT)
     patterns = [
-        r'[Dd]yzelinas\s+E[^0-9]{0,150}?(\d{4}[.,]\d{2})',  # e.g. 1801.40
-        r'su\s+PVM[^0-9]{0,50}?(\d{4}[.,]\d{2})',
-        r'(\d{4}[.,]\d{2})[^0-9]{0,30}su\s+PVM',
+        r'[Dd]yzelinas\s+E[^0-9]{0,150}?(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})',
+        r'su\s+PVM[^0-9]{0,50}?(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})',
+        r'(\d{1,2}[\s\xa0]?\d{3}[.,]\d{2})[^0-9]{0,30}su\s+PVM',
     ]
     for pat in patterns:
         matches = re.findall(pat, text, re.IGNORECASE)
         for m in matches:
-            val = float(m.replace(",", "."))
+            clean_val = re.sub(r'[^\d,.]', '', m).replace(",", ".")
+            val = float(clean_val)
             if 1000 < val < 2500:  # EUR/1000l range
                 eur_l = val / 1000
                 log("Orlen LT", f"Text: {val} EUR/1000l → {eur_l:.3f} EUR/l")
