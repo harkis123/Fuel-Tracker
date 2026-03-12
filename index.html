@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fuel Price Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg0:#04060c;--bg1:#0a0e1a;--bg2:#111827;--bg3:#1a2332;--bg4:#1e293b;
+  --brd:#1e293b;--brd2:#334155;
+  --t1:#f1f5f9;--t2:#e2e8f0;--t3:#94a3b8;--t4:#64748b;--t5:#475569;
+  --blue:#3b82f6;--cyan:#06b6d4;--orange:#f97316;--purple:#a855f7;
+  --teal:#2dd4bf;--amber:#f59e0b;--green:#22c55e;--red:#ef4444;
+  --F:'Outfit',sans-serif;--M:'IBM Plex Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--F);background:var(--bg0);color:var(--t1);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(circle at 20% 20%,rgba(59,130,246,.03) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(168,85,247,.02) 0%,transparent 50%);pointer-events:none}
+.app{position:relative;z-index:1}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:3px}
+
+/* HEADER */
+.hdr{background:linear-gradient(180deg,rgba(17,24,39,.97),rgba(10,14,26,.92));backdrop-filter:blur(20px);border-bottom:1px solid var(--brd);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--orange),var(--red));display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 12px rgba(249,115,22,.3)}
+.brand-title{font-size:16px;font-weight:800;letter-spacing:-.3px}
+.brand-sub{font-size:10px;color:var(--t4)}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.dot{width:8px;height:8px;border-radius:50%;animation:pulse 2s ease-in-out infinite}
+.dot.ok{background:var(--green)}.dot.loading{background:var(--amber)}.dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.rbtn{padding:5px 12px;border-radius:7px;background:var(--bg4);border:1px solid var(--brd);color:var(--t3);font-size:10px;font-weight:600;font-family:var(--F);cursor:pointer;text-decoration:none;transition:.2s}
+.rbtn:hover{border-color:var(--brd2);color:var(--t1)}
+
+/* NAV */
+.nav{display:flex;gap:3px;background:var(--bg1);padding:3px;border-radius:9px;border:1px solid var(--brd)}
+.nav-b{padding:6px 16px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;font-family:var(--F);background:transparent;color:var(--t4);transition:.2s;white-space:nowrap}
+.nav-b:hover{color:var(--t3);background:var(--bg2)}
+.nav-b.on{background:linear-gradient(135deg,var(--blue),#2563eb);color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.35)}
+
+/* LAYOUT */
+.main{padding:24px 28px;max-width:1360px;margin:0 auto}
+@media(max-width:900px){.main{padding:14px}.hdr{padding:0 14px}.g2{grid-template-columns:1fr!important}}
+.gk{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+
+/* KPI */
+.kpi{background:var(--bg2);border-radius:13px;padding:20px 22px;border:1px solid var(--brd);position:relative;overflow:hidden;transition:.25s;animation:fu .5s ease-out both}
+.kpi:hover{border-color:var(--brd2);transform:translateY(-2px);box-shadow:0 4px 24px rgba(0,0,0,.3)}
+.kpi:nth-child(1){animation-delay:.05s}.kpi:nth-child(2){animation-delay:.1s}.kpi:nth-child(3){animation-delay:.15s}.kpi:nth-child(4){animation-delay:.2s}.kpi:nth-child(5){animation-delay:.25s}
+.kpi-ac{position:absolute;top:0;left:0;width:3px;height:100%}
+.kpi-ico{position:absolute;top:14px;right:16px;font-size:22px;opacity:.12}
+.kpi-lbl{font-size:9.5px;color:var(--t4);text-transform:uppercase;letter-spacing:1.4px;font-weight:700;margin-bottom:8px;padding-left:12px}
+.kpi-val{font-size:28px;font-weight:900;font-family:var(--M);letter-spacing:-1px;line-height:1;padding-left:12px}
+.kpi-ft{display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:12px}
+.kpi-tr{font-size:11px;font-weight:700;font-family:var(--M);padding:2px 7px;border-radius:5px}
+.kpi-tr.up{background:rgba(239,68,68,.12);color:var(--red)}.kpi-tr.dn{background:rgba(34,197,94,.12);color:var(--green)}
+.kpi-s{font-size:10px;color:var(--t4)}
+
+/* PANEL */
+.pnl{background:var(--bg2);border-radius:13px;border:1px solid var(--brd);overflow:hidden;animation:fu .5s ease-out both}
+.pnl-h{padding:16px 22px 12px;display:flex;justify-content:space-between;align-items:center}
+.pnl-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--t4)}
+.pnl-b{padding:0 22px 20px}
+.pnl-st{font-size:10px;color:var(--t5)}
+
+/* SPARKLINE */
+.sr{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--brd)}
+.sr:last-child{border-bottom:none}
+.sr-l{display:flex;align-items:center;gap:9px;font-size:11px;color:var(--t3);font-weight:600;min-width:115px}
+.sr-d{width:7px;height:7px;border-radius:50%}
+.sr-v{font-family:var(--M);font-size:12px;font-weight:600;min-width:60px;text-align:right}
+
+/* BARS */
+.bars{display:flex;align-items:flex-end;gap:9px;height:190px;padding:0 6px}
+.bc{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bv{font-size:9px;color:var(--t4);font-family:var(--M);margin-bottom:5px}
+.bar{width:100%;max-width:42px;border-radius:5px 5px 2px 2px;position:relative;transition:height .8s cubic-bezier(.4,0,.2,1)}
+.bar::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.1),transparent 60%)}
+.bl{font-size:10px;color:var(--t4);font-weight:700;margin-top:7px}
+
+/* TABLE */
+.tw{overflow-x:auto;overflow-y:auto;max-height:480px}
+.tw table{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
+.tw th{padding:10px 12px;text-align:left;color:var(--t4);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid var(--brd);position:sticky;top:0;background:var(--bg2);z-index:2}
+.tw td{padding:9px 12px;color:var(--t3);font-variant-numeric:tabular-nums;border-bottom:1px solid var(--brd);transition:.2s}
+.tw tr:hover td{background:var(--bg3)}
+.nm{font-family:var(--M);text-align:right}.ps{color:var(--red)!important}.ng{color:var(--green)!important}.bd{font-weight:700;color:var(--t1)!important}
+
+/* SOURCES */
+.sg{display:grid;gap:12px}
+.sc{background:var(--bg2);border-radius:13px;padding:18px 22px;border:1px solid var(--brd);border-left-width:3px;transition:.2s}
+.sc:hover{border-color:var(--brd2)}
+.sc-n{font-weight:800;font-size:13px}.sc-u{font-family:var(--M);font-size:10px;color:var(--t4);margin-top:3px;word-break:break-all}
+.sc-bg{padding:2px 9px;border-radius:20px;font-size:9px;font-weight:700}
+.sc-nt{font-size:11px;color:var(--t3);line-height:1.7;margin-top:10px}
+.ib{background:linear-gradient(135deg,var(--bg2),#0f1729);border-radius:13px;padding:24px;border:1px solid var(--brd2);margin-top:12px}
+.ib h4{font-size:15px;font-weight:800;margin-bottom:14px}.ib p{font-size:11px;color:var(--t3);line-height:1.8;margin-bottom:10px}.ib strong{color:var(--blue)}
+.emp{padding:40px;text-align:center;color:var(--t5);font-size:13px}
+.stt{font-size:16px;font-weight:800;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between}
+.stt .c{font-size:12px;font-weight:400;color:var(--t4)}
+.hidden{display:none!important}
+.ub{background:var(--bg4);padding:7px 28px;font-size:10px;color:var(--t5);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--brd)}
+@keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="hdr">
+    <div class="brand">
+      <div class="logo">⛽</div>
+      <div><div class="brand-title">Fuel Price Tracker</div><div class="brand-sub" id="st">Loading...</div></div>
+    </div>
+    <nav class="nav">
+      <button class="nav-b on" data-t="dash">◉ Dashboard</button>
+      <button class="nav-b" data-t="daily">◫ Daily Data</button>
+      <button class="nav-b" data-t="weekly">◧ EU Bulletin</button>
+      <button class="nav-b" data-t="src">◎ Sources</button>
+    </nav>
+    <div class="hdr-right">
+      <div class="dot loading" id="dot"></div>
+      <button class="rbtn" onclick="init()">↻ Refresh</button>
+      <button class="rbtn" onclick="downloadExcel()" style="background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none">📥 Download Excel</button>
+      <a class="rbtn" href="https://github.com/harkis123/Fuel-Tracker" target="_blank">📂 Repo</a>
+    </div>
+  </header>
+  <div class="ub" id="ub">⏳ Loading data from GitHub...</div>
+  <main class="main">
+    <section id="tab-dash">
+      <div class="gk" id="kpi"></div>
+      <div class="g2">
+        <div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div>
+        <div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin — Latest</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div>
+      </div>
+    </section>
+    <section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
+    <section id="tab-weekly" class="hidden"><div class="stt">EU Weekly Oil Bulletin <span class="c" id="wc"></span></div><div class="pnl"><div class="tw" id="wt"></div></div></section>
+    <section id="tab-src" class="hidden"><div class="stt">Data Sources & Automation</div><div class="sg" id="sg"></div></section>
+  </main>
+</div>
+<script>
+// ═══════════════════════════════════════
+// CONFIG — Change repo if needed
+// ═══════════════════════════════════════
+const REPO = "harkis123/Fuel-Tracker";
+const FILE = "fuel_tracker.xlsx";
+const XLSX_URL = `https://raw.githubusercontent.com/${REPO}/main/${FILE}`;
+
+let D=[],W=[];
+
+// NAV
+document.querySelectorAll('.nav-b').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-b').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  ['dash','daily','weekly','src'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hidden',t!==b.dataset.t));
+}));
+
+// FETCH EXCEL FROM GITHUB
+async function init(){
+  const dot=document.getElementById('dot'),st=document.getElementById('st'),ub=document.getElementById('ub');
+  dot.className='dot loading';st.textContent='Fetching data...';
+  try{
+    const r=await fetch(XLSX_URL,{cache:'no-store'});
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const buf=await r.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    
+    // Parse Daily Tracker
+    if(wb.SheetNames.includes('Daily Tracker')){
+      const ws=wb.Sheets['Daily Tracker'];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      // Find header row (row with "Date")
+      let hIdx=0;
+      for(let i=0;i<Math.min(10,raw.length);i++){if(raw[i]&&raw[i][0]==='Date'){hIdx=i;break;}}
+      const hdr=raw[hIdx];
+      D=[];
+      for(let i=hIdx+1;i<raw.length;i++){
+        const r=raw[i];if(!r||!r[0])continue;
+        const dt=r[0] instanceof Date?r[0].toISOString().split('T')[0]:(r[0]||'').toString().substring(0,10);
+        if(!dt||dt.length<8)continue;
+        D.push({
+          date:dt,day:r[1]||'',
+          plnM3:n(r[2]),plnEur:n(r[3]),plEur:n(r[4]),
+          ltEur:n(r[5]),delta:n(r[6]),deltaPct:n(r[7]),
+          deEur:n(r[8]),seSek:n(r[9]),sekEur:n(r[10]),seEur:n(r[11]),
+          notes:r[12]||''
+        });
+      }
+      D.sort((a,b)=>b.date.localeCompare(a.date));
+    }
+
+    // Parse Weekly
+    if(wb.SheetNames.includes('Weekly Oil Bulletin')){
+      const ws=wb.Sheets['Weekly Oil Bulletin'];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      let hIdx=0;
+      for(let i=0;i<Math.min(10,raw.length);i++){if(raw[i]&&String(raw[i][0]).includes('Week')){hIdx=i;break;}}
+      W=[];
+      for(let i=hIdx+1;i<raw.length;i++){
+        const r=raw[i];if(!r||!r[0])continue;
+        const dt=r[0] instanceof Date?r[0].toISOString().split('T')[0]:(r[0]||'').toString().substring(0,10);
+        if(!dt||dt.length<8)continue;
+        W.push({date:dt,LT:n(r[1]),LV:n(r[2]),EE:n(r[3]),DK:n(r[4]),SE:n(r[5]),FI:n(r[6]),EU:n(r[7])});
+      }
+      W.sort((a,b)=>b.date.localeCompare(a.date));
+    }
+
+    dot.className='dot ok';
+    st.textContent=`${D.length} daily · ${W.length} weekly entries`;
+    ub.innerHTML=`✅ Data loaded from GitHub — ${D.length} daily, ${W.length} weekly — ${new Date().toLocaleString('lt-LT')}`;
+    render();
+  }catch(e){
+    dot.className='dot err';st.textContent='Failed';
+    ub.innerHTML=`❌ Error: ${e.message}. Check that repo is public and file exists.`;
+  }
+}
+
+function n(v){return(v!=null&&v!==''&&!isNaN(v))?Number(v):null}
+function f(v,d=3){return v!=null?v.toFixed(d):'—'}
+function pct(a,b){return(a&&b&&b!==0)?((a-b)/b)*100:null}
+
+function render(){
+  const L=D[0]||{},P=D[1]||{},E=W[0]||{};
+  const plD=L.plEur!=null&&L.ltEur!=null?L.plEur-L.ltEur:null;
+
+  // KPI
+  const kpis=[
+    {l:'ORLEN LT',v:f(L.ltEur),tr:pct(L.ltEur,P.ltEur),s:'EUR/l',c:'var(--cyan)',i:'🇱🇹'},
+    {l:'ORLEN PL → EUR',v:f(L.plEur),tr:pct(L.plEur,P.plEur),s:'EUR/l',c:'var(--orange)',i:'🇵🇱'},
+    {l:'Δ PL vs LT',v:plD!=null?(plD>0?'+':'')+plD.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},
+    {l:'ELVIS DE',v:f(L.deEur),tr:pct(L.deEur,P.deEur),s:'EUR/l',c:'var(--purple)',i:'🇩🇪'},
+    {l:'BSH/ST1 SE',v:f(L.seEur),tr:pct(L.seEur,P.seEur),s:'EUR/l',c:'var(--teal)',i:'🇸🇪'},
+  ];
+  document.getElementById('kpi').innerHTML=kpis.map(k=>{
+    const tc=k.tr>.05?'up':k.tr<-.05?'dn':'';
+    const ti=k.tr>.05?'▲':k.tr<-.05?'▼':'';
+    const tv=k.tr!=null?`<span class="kpi-tr ${tc}">${ti} ${Math.abs(k.tr).toFixed(1)}%</span>`:'';
+    return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;
+  }).join('');
+
+  // SPARKLINES
+  const sp=[
+    {l:'Orlen LT',k:'ltEur',c:'var(--cyan)',h:'#06b6d4'},
+    {l:'Orlen PL (EUR)',k:'plEur',c:'var(--orange)',h:'#f97316'},
+    {l:'Elvis DE',k:'deEur',c:'var(--purple)',h:'#a855f7'},
+    {l:'BSH SE (EUR)',k:'seEur',c:'var(--teal)',h:'#2dd4bf'},
+  ];
+  document.getElementById('spk').innerHTML=sp.map(s=>{
+    const v=D.slice(0,14).reverse().map(r=>r[s.k]).filter(x=>x!=null);
+    const lv=v.length?v[v.length-1].toFixed(3):'—';
+    return`<div class="sr"><div class="sr-l"><div class="sr-d" style="background:${s.c}"></div>${s.l}</div>${spark(v,s.h,125,34)}<div class="sr-v">${lv}</div></div>`;
+  }).join('');
+
+  // EU BARS
+  const cc=['LT','LV','EE','DK','SE','FI'],bc=['#f97316','#06b6d4','#a855f7','#2dd4bf','#f59e0b','#ef4444'];
+  const ev=cc.map(c=>E[c]||0),mx=Math.max(...ev,.001);
+  document.getElementById('eul').textContent=E.date?`${E.date}${E.EU?' | EU: '+E.EU.toFixed(3)+' €/l':''}`:'No data';
+  document.getElementById('bch').innerHTML=ev.some(x=>x>0)?cc.map((c,i)=>{
+    const h=Math.max((ev[i]/mx)*155,3);
+    return`<div class="bc"><div class="bv">${ev[i]>0?ev[i].toFixed(3):'—'}</div><div class="bar" style="height:${h}px;background:linear-gradient(180deg,${bc[i]},${bc[i]}88)"></div><div class="bl">${c}</div></div>`;
+  }).join(''):'<div class="emp">Add EU data to see chart</div>';
+
+  // DAILY TABLE
+  document.getElementById('dc').textContent=`(${D.length})`;
+  let dt='<table><thead><tr><th>Date</th><th>Day</th><th class="nm">Orlen LT</th><th class="nm">Orlen PL (€)</th><th class="nm">Δ PL–LT</th><th class="nm">Δ %</th><th class="nm">Elvis DE</th><th class="nm">BSH SE (€)</th><th>Notes</th></tr></thead><tbody>';
+  if(!D.length)dt+='<tr><td colspan="9" class="emp">No data yet</td></tr>';
+  D.forEach(r=>{
+    const d=r.delta,dc=d!=null?(d<0?'ng':d>0?'ps':''):'';
+    const dp=r.deltaPct;
+    dt+=`<tr><td class="bd">${r.date}</td><td>${r.day}</td><td class="nm">${f(r.ltEur)}</td><td class="nm">${f(r.plEur)}</td><td class="nm ${dc}">${d!=null?(d>0?'+':'')+d.toFixed(3):'—'}</td><td class="nm ${dc}">${dp!=null?(dp>0?'+':'')+(dp*100).toFixed(1)+'%':'—'}</td><td class="nm">${f(r.deEur)}</td><td class="nm">${f(r.seEur)}</td><td>${r.notes}</td></tr>`;
+  });
+  dt+='</tbody></table>';
+  document.getElementById('dt').innerHTML=dt;
+
+  // WEEKLY TABLE
+  document.getElementById('wc').textContent=`(${W.length})`;
+  let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}</th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
+  if(!W.length)wt+=`<tr><td colspan="${cc.length+3}" class="emp">No data</td></tr>`;
+  W.forEach(r=>{
+    const d=(r.LT&&r.EU&&r.EU!==0)?((r.LT-r.EU)/r.EU)*100:null;
+    const dc=d!=null?(d<0?'ng':d>0?'ps':''):'';
+    wt+=`<tr><td class="bd">${r.date}</td>${cc.map(c=>`<td class="nm">${f(r[c])}</td>`).join('')}<td class="nm">${f(r.EU)}</td><td class="nm ${dc}">${d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'}</td></tr>`;
+  });
+  wt+='</tbody></table>';
+  document.getElementById('wt').innerHTML=wt;
+
+  // SOURCES
+  renderSrc();
+}
+
+function spark(data,color,w,h){
+  if(!data||data.length<2)return`<svg width="${w}" height="${h}" style="opacity:.3"><text x="${w/2}" y="${h/2+3}" text-anchor="middle" fill="#64748b" font-size="8">No data</text></svg>`;
+  const mn=Math.min(...data),mx=Math.max(...data),rg=mx-mn||1;
+  const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-mn)/rg)*(h-6)-3}`).join(' ');
+  const ly=h-((data[data.length-1]-mn)/rg)*(h-6)-3;
+  const id=color.replace('#','');
+  return`<svg width="${w}" height="${h}"><defs><linearGradient id="g${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".2"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><polygon points="0,${h} ${pts} ${w},${h}" fill="url(#g${id})"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${w}" cy="${ly}" r="2.5" fill="${color}"/></svg>`;
+}
+
+function renderSrc(){
+  const S=[
+    {n:'Orlen PL — Ekodiesel',u:'petrodom.pl (mirrors orlen.pl)',f:'Daily',c:'#f97316',t:'Hurtowe ceny via petrodom.pl → Ekodiesel PLN/m³. Auto-scrape: ✅ Working (via petrodom.pl mirror).'},
+    {n:'Orlen LT — Kainų protokolai',u:'orlenlietuva.lt → PDF protocols',f:'Daily',c:'#06b6d4',t:'Juodeikių terminalas → Dyzelinas E kl. su RRME → EUR/l. Auto-scrape: 🔄 PDF download + parsing (pdfplumber).'},
+    {n:'EU Weekly Oil Bulletin',u:'fuel-prices.eu (EC data)',f:'Weekly',c:'#f59e0b',t:'LT/LV/EE/DK/SE/FI + EU avg diesel prices. Auto-scrape: 🔄 Via fuel-prices.eu + EC PDF fallback.'},
+    {n:'Elvis FSC (DE)',u:'mehr-tanken.de/aktuelle-spritpreise',f:'Daily',c:'#a855f7',t:'Aktuelle Kraftstoffpreise → Diesel EUR/l. Auto-scrape: ✅ Working.'},
+    {n:'BSH / ST1 (SE)',u:'st1.se/foretag/listpris',f:'Weekly',c:'#2dd4bf',t:'Företag → Listpris → Diesel SEK/l. Auto-scrape: ✅ Working.'},
+    {n:'FX Rates (ECB)',u:'frankfurter.app/latest?from=EUR&to=PLN,SEK',f:'Daily',c:'#3b82f6',t:'PLN/EUR + SEK/EUR. Auto-scrape: ✅ Working. Free API, no auth.'},
+  ];
+  const fc=f=>f==='Daily'?'background:rgba(59,130,246,.15);color:#60a5fa':'background:rgba(245,158,11,.15);color:#fbbf24';
+  let h=S.map(s=>`<div class="sc" style="border-left-color:${s.c}"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><div class="sc-n">${s.n}</div><div class="sc-u">${s.u}</div></div><span class="sc-bg" style="${fc(s.f)}">${s.f}</span></div><div class="sc-nt">${s.t}</div></div>`).join('');
+  h+=`<div class="ib"><h4>🤖 Automation Architecture</h4>
+<p><strong>GitHub Actions</strong> runs daily at 10:30 LT. Python scraper fetches all sources and writes into Excel. Committed back to repo automatically.</p>
+<p><strong>This dashboard</strong> reads Excel from GitHub via SheetJS. Auto-refreshes every 5 min. Click "📥 Download Excel" to export.</p>
+<p><strong>Automated:</strong> FX ✅ (frankfurter.app), Orlen PL ✅ (petrodom.pl mirror), Elvis DE ✅, BSH/ST1 SE ✅, Orlen LT 🔄 (PDF parsing), EU Bulletin 🔄 (fuel-prices.eu + EC PDF).</p>
+<p><strong>Excel export:</strong> 3 sheets — flat list (Data/Šaltinis/Kaina/EUR), EU Bulletin, daily comparison.</p></div>`;
+  document.getElementById('sg').innerHTML=h;
+}
+
+// EXCEL DOWNLOAD — generates xlsx with format: Data / Šaltinis / Kaina / Kaina EUR/l
+function downloadExcel(){
+  if(!D.length&&!W.length){alert('No data loaded yet. Wait for data to load first.');return;}
+  const wb=XLSX.utils.book_new();
+  
+  // Sheet 1: All Daily Data (flat format)
+  const dailyRows=[["Data","Šaltinis","Kaina","Valiuta","Kaina EUR/l"]];
+  D.forEach(r=>{
+    if(r.ltEur!=null) dailyRows.push([r.date,"Orlen LT (Dyzelinas E)",r.ltEur,"EUR/l",r.ltEur]);
+    if(r.plEur!=null) dailyRows.push([r.date,"Orlen PL (Ekodiesel)",r.plEur,"EUR/l",r.plEur]);
+    if(r.plnM3!=null&&r.plnEur!=null) dailyRows.push([r.date,"Orlen PL (raw)",r.plnM3,"PLN/m³",r.plEur]);
+    if(r.deEur!=null) dailyRows.push([r.date,"Elvis FSC DE",r.deEur,"EUR/l",r.deEur]);
+    if(r.seEur!=null) dailyRows.push([r.date,"BSH/ST1 SE",r.seEur,"EUR/l",r.seEur]);
+    if(r.seSek!=null) dailyRows.push([r.date,"BSH/ST1 SE (raw)",r.seSek,"SEK/l",r.seEur]);
+    if(r.plnEur!=null) dailyRows.push([r.date,"FX PLN/EUR",r.plnEur,"rate",null]);
+    if(r.sekEur!=null) dailyRows.push([r.date,"FX SEK/EUR",r.sekEur,"rate",null]);
+  });
+  const ws1=XLSX.utils.aoa_to_sheet(dailyRows);
+  ws1['!cols']=[{wch:12},{wch:22},{wch:12},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,"Daily Prices");
+  
+  // Sheet 2: EU Weekly Bulletin
+  const weeklyRows=[["Data","LT","LV","EE","DK","SE","FI","EU Avg"]];
+  W.forEach(r=>weeklyRows.push([r.date,r.LT,r.LV,r.EE,r.DK,r.SE,r.FI,r.EU]));
+  const ws2=XLSX.utils.aoa_to_sheet(weeklyRows);
+  ws2['!cols']=[{wch:12},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws2,"EU Bulletin");
+  
+  // Sheet 3: Daily comparison table (wide format)
+  const compRows=[["Data","Orlen LT EUR/l","Orlen PL EUR/l","Δ PL-LT","Elvis DE EUR/l","BSH SE EUR/l","PLN/EUR","SEK/EUR"]];
+  D.forEach(r=>compRows.push([r.date,r.ltEur,r.plEur,r.delta,r.deEur,r.seEur,r.plnEur,r.sekEur]));
+  const ws3=XLSX.utils.aoa_to_sheet(compRows);
+  ws3['!cols']=[{wch:12},{wch:14},{wch:14},{wch:10},{wch:14},{wch:14},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws3,"Daily Comparison");
+  
+  XLSX.writeFile(wb,`fuel_prices_${TODAY_STR||new Date().toISOString().split('T')[0]}.xlsx`);
+}
+const TODAY_STR=new Date().toISOString().split('T')[0];
+
+// INIT
+init();
+setInterval(init,5*60*1000);
+</script>
+</body>
+</html>
