@@ -67,25 +67,32 @@ def fetch_orlen_lt():
         r = requests.get(list_url, headers=H, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
+        
         pdf_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if ".pdf" in href.lower() and "kainos" in href.lower():
+            if ".pdf" in href.lower() and ("kainos" in href.lower() or "realizacija" in href.lower()):
                 if not href.startswith("http"):
                     href = "https://www.orlenlietuva.lt" + href
-                pdf_links.append(href)
+                pdf_links.append(href.replace(" ", "%20")) # Sutvarkome tarpus URL
+        
+        # Jei neradome nuorodų puslapyje, bandom sugeneruoti pagal datą (kaip fallback)
         if not pdf_links:
             for days_back in range(7):
                 d = TODAY - timedelta(days=days_back)
-                pdf_links.append(f"https://www.orlenlietuva.lt/LT/Wholesale/Prices/Kainos {d.strftime('%Y %m %d')} realizacija internet.pdf")
+                pdf_links.append(f"https://www.orlenlietuva.lt/LT/Wholesale/Prices/Kainos%20{d.strftime('%Y%%20%m%%20%d')}%%20realizacija%%20internet.pdf")
+
         for pdf_url in pdf_links[:5]:
             try:
+                log("Orlen LT", f"Tikrinamas PDF: {pdf_url}")
                 r2 = requests.get(pdf_url, headers=H, timeout=15)
                 if r2.status_code == 200 and len(r2.content) > 500:
                     price = parse_orlen_lt_pdf(r2.content)
                     if price: return price
             except: continue
-        log("Orlen LT", "No PDF parsed", "WARN"); return None
+            
+        log("Orlen LT", "Kaina nerasta nei viename PDF", "WARN")
+        return None
     except Exception as e:
         log("Orlen LT", str(e), "ERROR"); return None
 
@@ -94,51 +101,47 @@ def parse_orlen_lt_pdf(pdf_bytes):
         import pdfplumber
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             for page in pdf.pages:
-                # Extract all tables
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
                         if not row: continue
+                        # Sujungiam visas eilutės ląsteles į vieną tekstą paieškai
                         row_text = " ".join([str(c) for c in row if c]).lower()
-                        # Look for "Dyzelinas E" row
-                        if "dyzelinas" in row_text and ("rrme" in row_text or "e kl" in row_text):
-                            # Find the SELLING price with VAT — it's the LAST or largest price in the row
-                            # The protocol typically has: base price, with excise, with excise+VAT
-                            # We need "pardavimo kaina su PVM" = selling price with VAT
-                            prices = []
+                        
+                        if "dyzelinas" in row_text and ("e kl" in row_text or "rrme" in row_text):
+                            # Išvalome langelius ir sudedame skaičius į sąrašą
+                            raw_values = []
                             for cell in row:
-                                if cell is None: continue
-                                try:
-                                    clean_cell = re.sub(r'[^\d.,]', '', str(cell).replace(",", "."))
-                                    if not clean_cell: continue
-                                    val = float(clean_cell)
-                                    if val > 0: prices.append(val)
-                                except: continue
+                                if cell:
+                                    # Pašaliname viską išskyrus skaičius ir tašką/kablelį
+                                    clean = re.sub(r'[^\d.,]', '', str(cell).replace(",", "."))
+                                    if clean and clean != ".":
+                                        raw_values.append(clean)
                             
-                            # Prices in protocol are typically in EUR/1000l
-                            # pardavimo kaina su PVM is the largest value (includes all taxes)
-                            eur_1000l_prices = [p for p in prices if 500 < p < 3000]
-                            if eur_1000l_prices:
-                                # Take the highest = with VAT
-                                selling_price = max(eur_1000l_prices)
-                                eur_l = selling_price / 1000
-                                log("Orlen LT", f"Dyzelinas E = {selling_price} EUR/1000l → {eur_l:.3f} EUR/l (su PVM)")
+                            # Logika: Jei kaina "1 801.40" suskilo į "1" ir "801.40", jas sujungiame
+                            full_numbers = []
+                            i = 0
+                            while i < len(raw_values):
+                                val = raw_values[i]
+                                # Jei skaičius yra "1" arba "2" ir po jo eina skaičius su šimtais (pvz "801.40")
+                                if (val in ["1", "2"]) and (i + 1 < len(raw_values)) and ("." in raw_values[i+1]):
+                                    full_numbers.append(float(val + raw_values[i+1]))
+                                    i += 2
+                                else:
+                                    try: full_numbers.append(float(val))
+                                    except: pass
+                                    i += 1
+                            
+                            # Ieškome didžiausios vertės (tai bus kaina su PVM)
+                            valid_prices = [p for p in full_numbers if 1000 < p < 3000]
+                            if valid_prices:
+                                final_price = max(valid_prices)
+                                eur_l = final_price / 1000
+                                log("Orlen LT", f"SĖKMĖ! Rasta kaina su PVM: {final_price} EUR/1000l")
                                 return {"price_eur_l": round(eur_l, 4)}
-                            
-                            # Maybe price is already in EUR/l
-                            eur_l_prices = [p for p in prices if 0.8 < p < 3.0]
-                            if eur_l_prices:
-                                price = max(eur_l_prices)
-                                log("Orlen LT", f"Dyzelinas E = {price} EUR/l (su PVM)")
-                                return {"price_eur_l": round(price, 4)}
-                
-                # Fallback: search in text
-                text = page.extract_text() or ""
-                return find_lt_diesel_in_text(text)
-    except ImportError:
-        log("Orlen LT", "pdfplumber not installed", "WARN")
+                                
     except Exception as e:
-        log("Orlen LT", f"PDF error: {e}", "WARN")
+        log("Orlen LT", f"PDF klaida: {e}", "WARN")
     return None
 
 def find_lt_diesel_in_text(text):
