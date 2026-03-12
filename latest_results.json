@@ -1,1 +1,24 @@
-{}
+{
+  "date": "2026-03-12",
+  "results": {
+    "fx": true,
+    "orlen_pl": false,
+    "orlen_lt": false,
+    "elvis_de": true,
+    "bsh_se": true,
+    "eu_bulletin": false
+  },
+  "data": {
+    "fx": {
+      "PLN_EUR": 4.2523,
+      "SEK_EUR": 10.6543,
+      "date": "2026-03-11"
+    },
+    "elvis_de": {
+      "price_eur_l": 2.104
+    },
+    "bsh_se": {
+      "price_sek_l": 20.49
+    }
+  }
+}
