@@ -3,7 +3,7 @@
   "results": {
     "fx": true,
     "orlen_pl": true,
-    "orlen_lt": true,
+    "orlen_lt": false,
     "elvis_de": true,
     "bsh_se": true,
     "eu_bulletin": true
@@ -15,9 +15,6 @@
     },
     "orlen_pl": {
       "price_pln_m3": 6192.0
-    },
-    "orlen_lt": {
-      "price_eur_l": 6.5536
     },
     "elvis_de": {
       "price_eur_l": 2.163
