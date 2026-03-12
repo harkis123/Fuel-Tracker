@@ -1,7 +1,6 @@
 """
-Fuel Price Tracker — Automated Data Collection
-Fetches diesel prices from all configured sources and updates the Excel tracker.
-Designed to run daily via GitHub Actions.
+Fuel Price Tracker — Automated Data Collection v2
+Inserts new rows into Excel tracker with fetched data.
 """
 
 import requests
@@ -12,526 +11,606 @@ import sys
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from pathlib import Path
 
 EXCEL_PATH = Path(__file__).parent.parent / "fuel_tracker.xlsx"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,lt;q=0.8,pl;q=0.7",
+    "Accept-Language": "en-US,en;q=0.9,lt;q=0.8,pl;q=0.7,de;q=0.6",
 }
 
-TODAY = datetime.now().strftime("%Y-%m-%d")
-WEEKDAY = datetime.now().weekday()  # 0=Mon, 6=Sun
+TODAY = datetime.now()
+TODAY_STR = TODAY.strftime("%Y-%m-%d")
+WEEKDAY = TODAY.weekday()
+
+def log(src, msg, lvl="INFO"):
+    print(f"[{lvl}] {src}: {msg}")
 
 
-def log(source, msg, level="INFO"):
-    print(f"[{level}] {source}: {msg}")
-
-
-# ═══════════════════════════════════════════════
-# 1. FX RATES — ECB via Frankfurter API
-# ═══════════════════════════════════════════════
-def fetch_fx_rates():
-    """Fetch PLN/EUR and SEK/EUR from ECB via frankfurter.app"""
+# ═══════════════════════════════════════
+# 1. FX RATES
+# ═══════════════════════════════════════
+def fetch_fx():
     try:
-        url = "https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK"
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=15)
         r.raise_for_status()
         data = r.json()
         rates = data.get("rates", {})
-        pln = rates.get("PLN")
-        sek = rates.get("SEK")
-        log("FX", f"PLN/EUR={pln}, SEK/EUR={sek}")
-        return {"PLN_EUR": pln, "SEK_EUR": sek, "date": data.get("date", TODAY)}
+        log("FX", f"PLN={rates.get('PLN')}, SEK={rates.get('SEK')}")
+        return {"PLN_EUR": rates.get("PLN"), "SEK_EUR": rates.get("SEK")}
     except Exception as e:
         log("FX", f"Failed: {e}", "ERROR")
         return None
 
 
-# ═══════════════════════════════════════════════
-# 2. ORLEN PL — Ekodiesel wholesale price
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
+# 2. ORLEN PL
+# ═══════════════════════════════════════
 def fetch_orlen_pl():
-    """Fetch Ekodiesel wholesale price from Orlen PL"""
     try:
-        # Orlen PL publishes wholesale prices - try their API/page
+        # Try the archive page with XLS download links
         url = "https://www.orlen.pl/pl/dla-biznesu/hurtowe-ceny-paliw"
-        r = requests.get(url, headers=HEADERS, timeout=20)
-        r.raise_for_status()
+        r = requests.get(url, headers=HEADERS, timeout=20, allow_redirects=True)
+
+        if r.status_code != 200:
+            log("Orlen PL", f"HTTP {r.status_code}", "WARN")
+            return None
+
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Look for Ekodiesel price in page content
-        # Orlen typically has structured data or table with prices
-        text = soup.get_text()
+        # Method 1: Look for JSON data embedded in page
+        scripts = soup.find_all("script")
+        for script in scripts:
+            txt = script.string or ""
+            if "ekodiesel" in txt.lower() or "diesel" in txt.lower():
+                # Try to find price in JSON structures
+                matches = re.findall(r'"(?:price|value|cena)":\s*"?(\d+[.,]\d+)"?', txt, re.IGNORECASE)
+                for m in matches:
+                    price = float(m.replace(",", "."))
+                    if 3000 < price < 9000:
+                        log("Orlen PL", f"Found in script: {price} PLN/m³")
+                        return {"price_pln_m3": price}
 
-        # Try to find price patterns near "Ekodiesel" or "EKODIESEL"
-        patterns = [
-            r'[Ee]kodiesel[^0-9]*?(\d[\d\s]*[\.,]\d{2})',
-            r'[Ee]kodiesel.*?(\d{4,5}[\.,]\d{2})',
-            r'ON\s+Ekodiesel[^0-9]*?(\d[\d\s]*[\.,]\d{2})',
-        ]
-        for pat in patterns:
-            match = re.search(pat, text, re.DOTALL)
-            if match:
-                price_str = match.group(1).replace(" ", "").replace(",", ".")
-                price = float(price_str)
-                if 3000 < price < 10000:  # sanity: PLN/m³ should be in this range
-                    log("Orlen PL", f"Ekodiesel={price} PLN/m³")
+        # Method 2: Parse visible text
+        text = soup.get_text(" ", strip=True)
+        # Look for Ekodiesel followed by a price
+        for pat in [
+            r'[Ee]kodiesel[^0-9]{0,80}?(\d[\d\s]{2,6}[.,]\d{2})',
+            r'(\d{4,5}[.,]\d{2})[^0-9]{0,30}[Ee]kodiesel',
+        ]:
+            m = re.search(pat, text)
+            if m:
+                price = float(m.group(1).replace(" ", "").replace(",", "."))
+                if 3000 < price < 9000:
+                    log("Orlen PL", f"Parsed: {price} PLN/m³")
                     return {"price_pln_m3": price}
 
-        # If page is JS-rendered, try known API endpoints
-        api_urls = [
-            "https://www.orlen.pl/api/fuel-prices",
-            "https://www.orlen.pl/services/fuel-prices",
-        ]
-        for api_url in api_urls:
+        # Method 3: Try API endpoints
+        for api in [
+            "https://www.orlen.pl/services/fuel-prices/wholesale",
+            "https://www.orlen.pl/api/wholesale-fuel-prices",
+            "https://www.orlen.pl/content/dam/orlenpl/fuel-prices/wholesale.json",
+        ]:
             try:
-                r2 = requests.get(api_url, headers=HEADERS, timeout=10)
-                if r2.status_code == 200:
+                r2 = requests.get(api, headers=HEADERS, timeout=10)
+                if r2.status_code == 200 and r2.headers.get("content-type", "").startswith("application/json"):
                     data = r2.json()
-                    log("Orlen PL", f"API response keys: {list(data.keys()) if isinstance(data, dict) else 'list'}")
-                    # Parse based on actual API structure
-                    return parse_orlen_pl_api(data)
+                    # Search recursively for diesel price
+                    price = find_diesel_price(data, ["ekodiesel", "diesel", "on"])
+                    if price and 3000 < price < 9000:
+                        log("Orlen PL", f"API: {price} PLN/m³")
+                        return {"price_pln_m3": price}
             except:
                 continue
 
-        log("Orlen PL", "Could not extract price from page or API", "WARN")
+        log("Orlen PL", "Could not extract price — site likely JS-rendered", "WARN")
         return None
     except Exception as e:
         log("Orlen PL", f"Failed: {e}", "ERROR")
         return None
 
 
-def parse_orlen_pl_api(data):
-    """Try to extract Ekodiesel price from Orlen API response"""
-    if isinstance(data, dict):
-        for key, val in data.items():
-            if isinstance(val, list):
-                for item in val:
-                    if isinstance(item, dict):
-                        name = str(item.get("name", "") or item.get("productName", "")).lower()
-                        if "ekodiesel" in name or "diesel" in name:
-                            price = item.get("price") or item.get("value") or item.get("netPrice")
-                            if price:
-                                log("Orlen PL", f"API: Ekodiesel={price}")
-                                return {"price_pln_m3": float(price)}
+def find_diesel_price(obj, keywords, depth=0):
+    """Recursively search JSON for diesel price"""
+    if depth > 5:
+        return None
+    if isinstance(obj, dict):
+        name_fields = [str(obj.get(k, "")).lower() for k in ["name", "productName", "product", "fuel", "label"]]
+        if any(kw in nf for nf in name_fields for kw in keywords):
+            for k in ["price", "value", "netPrice", "grossPrice", "cena"]:
+                if k in obj and obj[k]:
+                    try:
+                        return float(str(obj[k]).replace(",", "."))
+                    except:
+                        pass
+        for v in obj.values():
+            result = find_diesel_price(v, keywords, depth + 1)
+            if result:
+                return result
+    elif isinstance(obj, list):
+        for item in obj:
+            result = find_diesel_price(item, keywords, depth + 1)
+            if result:
+                return result
     return None
 
 
-# ═══════════════════════════════════════════════
-# 3. ORLEN LT — Dyzelinas E wholesale
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
+# 3. ORLEN LT
+# ═══════════════════════════════════════
 def fetch_orlen_lt():
-    """Fetch diesel price from Orlen Lietuva wholesale"""
     try:
         url = "https://www.orlenlietuva.lt/LT/Wholesale/Puslapiai/Kainu-protokolai.aspx"
         r = requests.get(url, headers=HEADERS, timeout=20)
-        r.raise_for_status()
+
+        if r.status_code != 200:
+            log("Orlen LT", f"HTTP {r.status_code}", "WARN")
+            return None
+
         soup = BeautifulSoup(r.text, "html.parser")
-        text = soup.get_text()
 
-        # Look for diesel price pattern — typically EUR value like 1.234 or 1234.56
-        # Near keywords: Dyzelinas, Diesel, E kl., RRME
-        patterns = [
-            r'[Dd]yzelinas\s+E[^0-9]*?(\d+[\.,]\d{2,4})',
-            r'[Dd]iesel[^0-9]*?(\d+[\.,]\d{2,4})',
-            r'su\s+(?:akcizu|PVM)[^0-9]*?(\d+[\.,]\d{2,4})',
-        ]
+        # Look for tables with price data
+        tables = soup.find_all("table")
+        for table in tables:
+            text = table.get_text(" ", strip=True).lower()
+            if "dyzelinas" in text or "diesel" in text:
+                cells = table.find_all("td")
+                for i, cell in enumerate(cells):
+                    ct = cell.get_text(strip=True).lower()
+                    if "dyzelinas" in ct and "rrme" in ct:
+                        # Look at next cells for price
+                        for j in range(i+1, min(i+6, len(cells))):
+                            try:
+                                val = float(cells[j].get_text(strip=True).replace(",", ".").replace(" ", ""))
+                                if 0.5 < val < 3.0:
+                                    log("Orlen LT", f"Table: {val} EUR/l")
+                                    return {"price_eur_l": val}
+                                elif 500 < val < 3000:
+                                    log("Orlen LT", f"Table: {val} EUR/t")
+                                    return {"price_eur_l": val / 1000 * 1.19}
+                            except:
+                                continue
 
-        for pat in patterns:
-            match = re.search(pat, text, re.DOTALL)
-            if match:
-                price_str = match.group(1).replace(",", ".")
-                price = float(price_str)
-                # Price in EUR/l should be 0.8-2.5; in EUR/t it's 800-2500
-                if 0.5 < price < 3.0:
-                    log("Orlen LT", f"Diesel E={price} EUR/l")
-                    return {"price_eur_l": price}
-                elif 500 < price < 3000:
-                    price_l = price / 1000 * 1.2  # approximate t to l conversion
-                    log("Orlen LT", f"Diesel E={price} EUR/t → ~{price_l:.3f} EUR/l")
-                    return {"price_eur_l": price_l}
+        # Try to find PDF links and note them
+        pdf_links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if ".pdf" in href.lower():
+                pdf_links.append(href)
 
-        # Try to find PDF links (kainų protokolai are often PDFs)
-        pdf_links = [a["href"] for a in soup.find_all("a", href=True) if ".pdf" in a["href"].lower()]
         if pdf_links:
-            log("Orlen LT", f"Found {len(pdf_links)} PDF links — would need PDF parsing", "WARN")
+            log("Orlen LT", f"Found {len(pdf_links)} PDFs but cannot parse them in this environment", "WARN")
 
-        log("Orlen LT", "Could not extract price", "WARN")
+        # Fallback: look in page text
+        text = soup.get_text(" ", strip=True)
+        for pat in [
+            r'[Dd]yzelinas\s+E[^0-9]{0,60}?(\d+[.,]\d{2,4})',
+            r'su\s+(?:akcizu|PVM)[^0-9]{0,40}?(\d+[.,]\d{2,4})',
+        ]:
+            m = re.search(pat, text)
+            if m:
+                val = float(m.group(1).replace(",", "."))
+                if 0.5 < val < 3.0:
+                    log("Orlen LT", f"Text: {val} EUR/l")
+                    return {"price_eur_l": val}
+
+        log("Orlen LT", "Could not extract — likely PDF-only", "WARN")
         return None
     except Exception as e:
         log("Orlen LT", f"Failed: {e}", "ERROR")
         return None
 
 
-# ═══════════════════════════════════════════════
-# 4. ELVIS FSC DE — mehr-tanken.de
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
+# 4. ELVIS DE
+# ═══════════════════════════════════════
 def fetch_elvis_de():
-    """Fetch diesel price from mehr-tanken.de"""
     try:
+        # Try Tankerkönig API first (free, official German fuel price API)
+        # Fallback to mehr-tanken.de
         url = "https://www.mehr-tanken.de/aktuelle-spritpreise/"
         r = requests.get(url, headers=HEADERS, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        text = soup.get_text()
+        text = soup.get_text(" ", strip=True)
 
-        # Look for diesel price — typically 1.XX or 1.XXX EUR
-        patterns = [
-            r'[Dd]iesel[^0-9]*?(\d[\.,]\d{2,3})\s*(?:€|EUR)',
-            r'[Dd]iesel[^0-9]*?(\d[\.,]\d{2,3})',
-            r'(\d[\.,]\d{2,3})\s*(?:€|EUR)[^0-9]*?[Dd]iesel',
-        ]
-
-        for pat in patterns:
-            match = re.search(pat, text)
-            if match:
-                price_str = match.group(1).replace(",", ".")
-                price = float(price_str)
+        for pat in [
+            r'[Dd]iesel[^0-9]{0,40}?(\d[.,]\d{2,3})\s*(?:€|EUR|Euro)',
+            r'[Dd]iesel[^0-9]{0,40}?(\d[.,]\d{2,3})',
+            r'(\d[.,]\d{2,3})\s*(?:€|EUR)[^0-9]{0,20}[Dd]iesel',
+        ]:
+            m = re.search(pat, text)
+            if m:
+                price = float(m.group(1).replace(",", "."))
                 if 0.8 < price < 3.0:
                     log("Elvis DE", f"Diesel={price} EUR/l")
                     return {"price_eur_l": price}
 
-        log("Elvis DE", "Could not extract price", "WARN")
+        # Try finding in structured data / JSON-LD
+        for script in soup.find_all("script", {"type": "application/ld+json"}):
+            try:
+                data = json.loads(script.string)
+                price = find_diesel_price(data, ["diesel"])
+                if price and 0.8 < price < 3.0:
+                    log("Elvis DE", f"JSON-LD: {price} EUR/l")
+                    return {"price_eur_l": price}
+            except:
+                continue
+
+        log("Elvis DE", "Could not extract", "WARN")
         return None
     except Exception as e:
         log("Elvis DE", f"Failed: {e}", "ERROR")
         return None
 
 
-# ═══════════════════════════════════════════════
-# 5. BSH/ST1 SE — st1.se/foretag/listpris
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
+# 5. BSH / ST1 SE
+# ═══════════════════════════════════════
 def fetch_bsh_se():
-    """Fetch diesel list price from ST1 Sweden"""
     try:
         url = "https://st1.se/foretag/listpris"
         r = requests.get(url, headers=HEADERS, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        text = soup.get_text()
+        text = soup.get_text(" ", strip=True)
 
-        # Look for diesel price in SEK — typically 18-25 SEK/l
-        patterns = [
-            r'[Dd]iesel\s*(?:MK[13])?\s*[^0-9]*?(\d{1,2}[\.,]\d{2})\s*(?:kr|SEK)',
-            r'[Dd]iesel[^0-9]*?(\d{1,2}[\.,]\d{2})',
-            r'(\d{1,2}[\.,]\d{2})\s*(?:kr|SEK)[^0-9]*?[Dd]iesel',
-        ]
-
-        for pat in patterns:
-            match = re.search(pat, text)
-            if match:
-                price_str = match.group(1).replace(",", ".")
-                price = float(price_str)
-                if 10 < price < 35:  # SEK/l range
+        for pat in [
+            r'[Dd]iesel\s*(?:MK[123])?\s*[^0-9]{0,30}?(\d{1,2}[.,]\d{2})',
+            r'(\d{1,2}[.,]\d{2})\s*(?:kr|SEK)[^0-9]{0,20}[Dd]iesel',
+        ]:
+            m = re.search(pat, text)
+            if m:
+                price = float(m.group(1).replace(",", "."))
+                if 10 < price < 35:
                     log("BSH SE", f"Diesel={price} SEK/l")
                     return {"price_sek_l": price}
 
-        log("BSH SE", "Could not extract price", "WARN")
+        log("BSH SE", "Could not extract", "WARN")
         return None
     except Exception as e:
         log("BSH SE", f"Failed: {e}", "ERROR")
         return None
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 # 6. EU WEEKLY OIL BULLETIN
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 def fetch_eu_bulletin():
-    """Fetch latest diesel prices from EU Weekly Oil Bulletin (runs on Mondays)"""
     try:
-        # The EC publishes data at this endpoint
-        url = "https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en"
-        r = requests.get(url, headers=HEADERS, timeout=20)
+        # Try the direct data download endpoint
+        base = "https://energy.ec.europa.eu"
+        page_url = f"{base}/data-and-analysis/weekly-oil-bulletin_en"
+        r = requests.get(page_url, headers=HEADERS, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Try to find download link for the latest data file
-        links = soup.find_all("a", href=True)
-        data_links = [a for a in links if any(kw in a["href"].lower() for kw in [".csv", ".xls", "download", "prices_with_taxes"])]
+        # Find download links for CSV/XLS
+        download_links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"].lower()
+            text = a.get_text(strip=True).lower()
+            if any(kw in href for kw in [".csv", ".xls", "download", "export"]):
+                download_links.append(a["href"])
+            elif any(kw in text for kw in ["download", "csv", "excel", "prices with taxes"]):
+                download_links.append(a["href"])
 
-        if data_links:
-            data_url = data_links[0]["href"]
-            if not data_url.startswith("http"):
-                data_url = "https://energy.ec.europa.eu" + data_url
-            log("EU Bulletin", f"Found data link: {data_url}")
+        for link in download_links:
+            full_url = link if link.startswith("http") else base + link
+            try:
+                r2 = requests.get(full_url, headers=HEADERS, timeout=20)
+                if r2.status_code == 200:
+                    result = parse_eu_csv(r2.text)
+                    if result:
+                        return result
+            except:
+                continue
 
-            # Download and parse the data file
-            r2 = requests.get(data_url, headers=HEADERS, timeout=20)
-            r2.raise_for_status()
-            return parse_eu_bulletin_data(r2.text)
+        # Fallback: parse from HTML tables on page
+        tables = soup.find_all("table")
+        for table in tables:
+            result = parse_eu_table(table)
+            if result:
+                return result
 
-        # Fallback: try to parse prices from the HTML page itself
-        text = soup.get_text()
-        return parse_eu_bulletin_html(text)
-
+        log("EU Bulletin", "Could not find data", "WARN")
+        return None
     except Exception as e:
         log("EU Bulletin", f"Failed: {e}", "ERROR")
         return None
 
 
-def parse_eu_bulletin_data(csv_text):
-    """Parse EU bulletin CSV/text data"""
+def parse_eu_csv(text):
     countries = {"LT": None, "LV": None, "EE": None, "DK": None, "SE": None, "FI": None}
     eu_avg = None
+    cc_names = {"Lithuania": "LT", "Latvia": "LV", "Estonia": "EE", "Denmark": "DK", "Sweden": "SE", "Finland": "FI"}
 
-    lines = csv_text.split("\n")
-    for line in lines:
-        parts = line.split(",") if "," in line else line.split("\t")
+    for line in text.split("\n"):
+        parts = [p.strip() for p in (line.split(",") if "," in line else line.split("\t"))]
         for i, part in enumerate(parts):
-            part_clean = part.strip().upper()
-            for cc in countries:
-                if cc == part_clean or f"({cc})" in part_clean:
-                    # Look for numeric value in nearby columns
-                    for j in range(i+1, min(i+5, len(parts))):
-                        try:
-                            val = float(parts[j].strip().replace(",", "."))
-                            if 0.5 < val < 3.0:
-                                countries[cc] = val
-                                break
-                        except:
-                            continue
+            clean = part.strip('"').strip()
+            # Check country codes and names
+            matched_cc = None
+            if clean.upper() in countries:
+                matched_cc = clean.upper()
+            for name, cc in cc_names.items():
+                if name.lower() in clean.lower():
+                    matched_cc = cc
+                    break
 
-            if "EU" in part_clean and ("AVG" in part_clean or "AVERAGE" in part_clean or "WEIGHTED" in part_clean):
-                for j in range(i+1, min(i+5, len(parts))):
+            if matched_cc:
+                for j in range(i+1, min(i+8, len(parts))):
                     try:
-                        val = float(parts[j].strip().replace(",", "."))
-                        if 0.5 < val < 3.0:
+                        val = float(parts[j].strip().strip('"').replace(",", "."))
+                        if 0.5 < val < 3.5:
+                            countries[matched_cc] = val
+                            break
+                    except:
+                        continue
+
+            if "eu" in clean.lower() and any(kw in clean.lower() for kw in ["avg", "average", "weighted", "mean"]):
+                for j in range(i+1, min(i+8, len(parts))):
+                    try:
+                        val = float(parts[j].strip().strip('"').replace(",", "."))
+                        if 0.5 < val < 3.5:
                             eu_avg = val
                             break
                     except:
                         continue
 
     if any(v for v in countries.values() if v is not None):
-        log("EU Bulletin", f"Parsed: {countries}, EU avg={eu_avg}")
+        log("EU Bulletin", f"CSV: {countries}, avg={eu_avg}")
         return {**countries, "EU_AVG": eu_avg}
-
-    log("EU Bulletin", "Could not parse data file", "WARN")
     return None
 
 
-def parse_eu_bulletin_html(text):
-    """Fallback: try to extract prices from page text"""
+def parse_eu_table(table):
     countries = {"LT": None, "LV": None, "EE": None, "DK": None, "SE": None, "FI": None}
-    for cc in countries:
-        # Look for country code followed by a price
-        patterns = [
-            rf'(?:Lithuania|Latvia|Estonia|Denmark|Sweden|Finland)\s*[\s:]*(\d[\.,]\d{{2,3}})',
-        ]
-        country_names = {"LT": "Lithuania", "LV": "Latvia", "EE": "Estonia", "DK": "Denmark", "SE": "Sweden", "FI": "Finland"}
-        pat = rf'{country_names[cc]}[\s\S]{{0,50}}?(\d[\.,]\d{{2,3}})'
-        match = re.search(pat, text)
-        if match:
-            val = float(match.group(1).replace(",", "."))
-            if 0.5 < val < 3.0:
-                countries[cc] = val
+    cc_names = {"Lithuania": "LT", "Latvia": "LV", "Estonia": "EE", "Denmark": "DK", "Sweden": "SE", "Finland": "FI"}
+
+    rows = table.find_all("tr")
+    for row in rows:
+        cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+        for i, cell in enumerate(cells):
+            matched_cc = None
+            if cell.upper() in countries:
+                matched_cc = cell.upper()
+            for name, cc in cc_names.items():
+                if name.lower() in cell.lower():
+                    matched_cc = cc
+                    break
+
+            if matched_cc:
+                for j in range(i+1, min(i+6, len(cells))):
+                    try:
+                        val = float(cells[j].replace(",", ".").replace(" ", ""))
+                        if 0.5 < val < 3.5:
+                            countries[matched_cc] = val
+                            break
+                    except:
+                        continue
 
     if any(v for v in countries.values() if v is not None):
-        log("EU Bulletin", f"HTML parsed: {countries}")
+        log("EU Bulletin", f"HTML table: {countries}")
         return countries
     return None
 
 
-# ═══════════════════════════════════════════════
-# EXCEL WRITER
-# ═══════════════════════════════════════════════
-def find_date_row(ws, target_date_str, start_row=5, date_col=1):
-    """Find row matching today's date, or first empty row"""
-    target = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-    first_empty = None
-
-    for row in range(start_row, start_row + 65):
-        cell_val = ws.cell(row=row, column=date_col).value
-        if cell_val is None:
-            if first_empty is None:
-                first_empty = row
-            continue
-        if hasattr(cell_val, 'date'):
-            cell_date = cell_val.date()
-        elif isinstance(cell_val, str):
-            try:
-                cell_date = datetime.strptime(cell_val, "%Y-%m-%d").date()
-            except:
-                continue
-        else:
-            continue
-
-        if cell_date == target:
-            return row
-
-    return first_empty
-
-
-def find_weekly_row(ws, start_row=4, date_col=1):
-    """Find first empty row in weekly sheet, or row matching this week"""
-    today = datetime.now().date()
-    monday = today - timedelta(days=today.weekday())
-
-    for row in range(start_row, start_row + 35):
-        cell_val = ws.cell(row=row, column=date_col).value
-        if cell_val is None:
-            return row
-        if hasattr(cell_val, 'date'):
-            if cell_val.date() == monday:
-                return row
-
-    return start_row
-
-
+# ═══════════════════════════════════════
+# EXCEL WRITER — INSERT ROW
+# ═══════════════════════════════════════
 def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=None, eu_bulletin=None):
-    """Write all fetched data into the Excel tracker"""
     if not EXCEL_PATH.exists():
-        log("Excel", f"File not found: {EXCEL_PATH}", "ERROR")
+        log("Excel", f"Not found: {EXCEL_PATH}", "ERROR")
         return False
 
     wb = load_workbook(str(EXCEL_PATH))
 
-    # ─── DAILY TRACKER ───
+    # ─── DAILY TRACKER: insert new row at position 5 ───
     if "Daily Tracker" in wb.sheetnames:
         ws = wb["Daily Tracker"]
-        row = find_date_row(ws, TODAY)
 
-        if row:
-            log("Excel", f"Writing daily data to row {row}")
+        # Shift rows down: insert a blank row at position 5
+        ws.insert_rows(5)
 
-            # Date (if empty)
-            if ws.cell(row=row, column=1).value is None:
-                ws.cell(row=row, column=1).value = datetime.strptime(TODAY, "%Y-%m-%d")
+        # Date
+        ws.cell(row=5, column=1).value = TODAY
+        ws.cell(row=5, column=1).number_format = 'YYYY-MM-DD'
+        ws.cell(row=5, column=1).font = Font(name="Aptos", size=10, bold=True, color="1F2937")
+        ws.cell(row=5, column=1).alignment = Alignment(horizontal="center", vertical="center")
 
-            # Orlen PL — col C (PLN/m³)
-            if orlen_pl and orlen_pl.get("price_pln_m3"):
-                ws.cell(row=row, column=3).value = orlen_pl["price_pln_m3"]
-                log("Excel", f"  C{row} = {orlen_pl['price_pln_m3']} (Orlen PL)")
+        # Day name
+        import calendar
+        ws.cell(row=5, column=2).value = calendar.day_abbr[WEEKDAY]
+        ws.cell(row=5, column=2).font = Font(name="Aptos", size=9, color="6B7280")
+        ws.cell(row=5, column=2).alignment = Alignment(horizontal="center", vertical="center")
 
-            # FX PLN/EUR — col D
-            if fx and fx.get("PLN_EUR"):
-                ws.cell(row=row, column=4).value = fx["PLN_EUR"]
-                log("Excel", f"  D{row} = {fx['PLN_EUR']} (PLN/EUR)")
+        input_font = Font(name="Aptos", size=10, color="1D4ED8")
+        input_fill = PatternFill("solid", fgColor="EFF6FF")
+        data_font = Font(name="Aptos", size=10, color="1F2937")
+        brd = Border(
+            left=Side("thin", color="D1D5DB"), right=Side("thin", color="D1D5DB"),
+            top=Side("thin", color="D1D5DB"), bottom=Side("thin", color="D1D5DB"))
 
-            # Orlen LT — col F (EUR/l)
-            if orlen_lt and orlen_lt.get("price_eur_l"):
-                ws.cell(row=row, column=6).value = orlen_lt["price_eur_l"]
-                log("Excel", f"  F{row} = {orlen_lt['price_eur_l']} (Orlen LT)")
+        # Orlen PL — col C (PLN/m³)
+        if orlen_pl and orlen_pl.get("price_pln_m3"):
+            ws.cell(row=5, column=3).value = orlen_pl["price_pln_m3"]
+            ws.cell(row=5, column=3).number_format = '#,##0.00'
+        ws.cell(row=5, column=3).font = input_font
+        ws.cell(row=5, column=3).fill = input_fill
+        ws.cell(row=5, column=3).border = brd
 
-            # Elvis DE — col I (EUR/l)
-            if elvis_de and elvis_de.get("price_eur_l"):
-                ws.cell(row=row, column=9).value = elvis_de["price_eur_l"]
-                log("Excel", f"  I{row} = {elvis_de['price_eur_l']} (Elvis DE)")
+        # PLN/EUR — col D
+        if fx and fx.get("PLN_EUR"):
+            ws.cell(row=5, column=4).value = fx["PLN_EUR"]
+        ws.cell(row=5, column=4).number_format = '0.0000'
+        ws.cell(row=5, column=4).font = input_font
+        ws.cell(row=5, column=4).fill = input_fill
+        ws.cell(row=5, column=4).border = brd
 
-            # BSH SE — col J (SEK/l)
-            if bsh_se and bsh_se.get("price_sek_l"):
-                ws.cell(row=row, column=10).value = bsh_se["price_sek_l"]
-                log("Excel", f"  J{row} = {bsh_se['price_sek_l']} (BSH SE)")
+        # EUR/l formula — col E
+        ws.cell(row=5, column=5).value = '=IF(AND(C5<>"",D5<>"",D5<>0),C5/D5/1000,"")'
+        ws.cell(row=5, column=5).number_format = '0.000'
+        ws.cell(row=5, column=5).font = data_font
+        ws.cell(row=5, column=5).border = brd
 
-            # FX SEK/EUR — col K
-            if fx and fx.get("SEK_EUR"):
-                ws.cell(row=row, column=11).value = fx["SEK_EUR"]
-                log("Excel", f"  K{row} = {fx['SEK_EUR']} (SEK/EUR)")
-        else:
-            log("Excel", "No matching date row found in Daily Tracker", "WARN")
+        # Orlen LT — col F
+        if orlen_lt and orlen_lt.get("price_eur_l"):
+            ws.cell(row=5, column=6).value = orlen_lt["price_eur_l"]
+        ws.cell(row=5, column=6).number_format = '0.000'
+        ws.cell(row=5, column=6).font = input_font
+        ws.cell(row=5, column=6).fill = input_fill
+        ws.cell(row=5, column=6).border = brd
 
-    # ─── WEEKLY OIL BULLETIN ───
-    if eu_bulletin and "Weekly Oil Bulletin" in wb.sheetnames:
+        # Delta EUR/l — col G
+        ws.cell(row=5, column=7).value = '=IF(AND(E5<>"",F5<>""),E5-F5,"")'
+        ws.cell(row=5, column=7).number_format = '+0.000;-0.000;"-"'
+        ws.cell(row=5, column=7).font = data_font
+        ws.cell(row=5, column=7).border = brd
+
+        # Delta % — col H
+        ws.cell(row=5, column=8).value = '=IF(AND(E5<>"",F5<>"",F5<>0),(E5-F5)/F5,"")'
+        ws.cell(row=5, column=8).number_format = '+0.0%;-0.0%;"-"'
+        ws.cell(row=5, column=8).font = data_font
+        ws.cell(row=5, column=8).border = brd
+
+        # Elvis DE — col I
+        if elvis_de and elvis_de.get("price_eur_l"):
+            ws.cell(row=5, column=9).value = elvis_de["price_eur_l"]
+        ws.cell(row=5, column=9).number_format = '0.000'
+        ws.cell(row=5, column=9).font = input_font
+        ws.cell(row=5, column=9).fill = input_fill
+        ws.cell(row=5, column=9).border = brd
+
+        # BSH SE SEK — col J
+        if bsh_se and bsh_se.get("price_sek_l"):
+            ws.cell(row=5, column=10).value = bsh_se["price_sek_l"]
+        ws.cell(row=5, column=10).number_format = '0.00'
+        ws.cell(row=5, column=10).font = input_font
+        ws.cell(row=5, column=10).fill = input_fill
+        ws.cell(row=5, column=10).border = brd
+
+        # SEK/EUR — col K
+        if fx and fx.get("SEK_EUR"):
+            ws.cell(row=5, column=11).value = fx["SEK_EUR"]
+        ws.cell(row=5, column=11).number_format = '0.0000'
+        ws.cell(row=5, column=11).font = input_font
+        ws.cell(row=5, column=11).fill = input_fill
+        ws.cell(row=5, column=11).border = brd
+
+        # BSH EUR formula — col L
+        ws.cell(row=5, column=12).value = '=IF(AND(J5<>"",K5<>"",K5<>0),J5/K5,"")'
+        ws.cell(row=5, column=12).number_format = '0.000'
+        ws.cell(row=5, column=12).font = data_font
+        ws.cell(row=5, column=12).border = brd
+
+        # Notes — col M
+        sources_ok = []
+        if fx: sources_ok.append("FX")
+        if orlen_pl: sources_ok.append("PL")
+        if orlen_lt: sources_ok.append("LT")
+        if elvis_de: sources_ok.append("DE")
+        if bsh_se: sources_ok.append("SE")
+        ws.cell(row=5, column=13).value = f"Auto: {','.join(sources_ok)}"
+        ws.cell(row=5, column=13).font = Font(name="Aptos", size=9, color="6B7280")
+        ws.cell(row=5, column=13).border = brd
+
+        ws.cell(row=5, column=14).value = "Auto"
+        ws.cell(row=5, column=14).font = Font(name="Aptos", size=8, color="9CA3AF")
+        ws.cell(row=5, column=14).alignment = Alignment(horizontal="center")
+        ws.cell(row=5, column=14).border = brd
+
+        log("Excel", f"Inserted daily row 5: {TODAY_STR}")
+
+    # ─── WEEKLY OIL BULLETIN: insert on Mondays ───
+    if eu_bulletin and WEEKDAY == 0 and "Weekly Oil Bulletin" in wb.sheetnames:
         ws_w = wb["Weekly Oil Bulletin"]
-        w_row = find_weekly_row(ws_w)
+        ws_w.insert_rows(4)
 
-        if w_row:
-            log("Excel", f"Writing weekly EU data to row {w_row}")
-            today = datetime.now().date()
-            monday = today - timedelta(days=today.weekday())
-            ws_w.cell(row=w_row, column=1).value = datetime.combine(monday, datetime.min.time())
+        monday = TODAY - timedelta(days=TODAY.weekday())
+        ws_w.cell(row=4, column=1).value = monday
+        ws_w.cell(row=4, column=1).number_format = 'YYYY-MM-DD'
+        ws_w.cell(row=4, column=1).font = Font(name="Aptos", size=10, bold=True, color="1F2937")
 
-            col_map = {"LT": 2, "LV": 3, "EE": 4, "DK": 5, "SE": 6, "FI": 7, "EU_AVG": 8}
-            for key, col in col_map.items():
-                val = eu_bulletin.get(key)
-                if val is not None:
-                    ws_w.cell(row=w_row, column=col).value = val
-                    log("Excel", f"  {get_column_letter_simple(col)}{w_row} = {val} ({key})")
+        col_map = {"LT": 2, "LV": 3, "EE": 4, "DK": 5, "SE": 6, "FI": 7, "EU_AVG": 8}
+        for key, col in col_map.items():
+            val = eu_bulletin.get(key)
+            if val is not None:
+                ws_w.cell(row=4, column=col).value = val
+                ws_w.cell(row=4, column=col).number_format = '0.000'
+                ws_w.cell(row=4, column=col).font = Font(name="Aptos", size=10, color="1D4ED8")
+
+        # LT vs EU formula
+        ws_w.cell(row=4, column=9).value = '=IF(AND(B4<>"",H4<>"",H4<>0),(B4-H4)/H4,"")'
+        ws_w.cell(row=4, column=9).number_format = '+0.0%;-0.0%;"-"'
+
+        log("Excel", f"Inserted weekly row 4: {monday.strftime('%Y-%m-%d')}")
 
     wb.save(str(EXCEL_PATH))
     log("Excel", f"Saved: {EXCEL_PATH}")
     return True
 
 
-def get_column_letter_simple(col):
-    return chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"
-
-
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 # MAIN
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 def main():
     print(f"\n{'='*60}")
-    print(f"  FUEL PRICE TRACKER — {TODAY}")
+    print(f"  FUEL PRICE TRACKER — {TODAY_STR}")
     print(f"{'='*60}\n")
 
     results = {}
 
-    # Always fetch FX rates (daily)
-    print("── Fetching FX rates ──")
-    results["fx"] = fetch_fx_rates()
+    print("── FX Rates ──")
+    results["fx"] = fetch_fx()
 
-    # Daily sources (skip weekends)
     if WEEKDAY < 5:
-        print("\n── Fetching Orlen PL ──")
+        print("\n── Orlen PL ──")
         results["orlen_pl"] = fetch_orlen_pl()
-
-        print("\n── Fetching Orlen LT ──")
+        print("\n── Orlen LT ──")
         results["orlen_lt"] = fetch_orlen_lt()
-
-        print("\n── Fetching Elvis DE ──")
+        print("\n── Elvis DE ──")
         results["elvis_de"] = fetch_elvis_de()
-
-        print("\n── Fetching BSH/ST1 SE ──")
+        print("\n── BSH/ST1 SE ──")
         results["bsh_se"] = fetch_bsh_se()
     else:
-        print("\n── Weekend — skipping daily wholesale sources ──")
+        print("\n── Weekend — skipping daily sources ──")
+        for k in ["orlen_pl", "orlen_lt", "elvis_de", "bsh_se"]:
+            results[k] = None
 
-    # Weekly EU bulletin (Monday only)
     if WEEKDAY == 0:
-        print("\n── Fetching EU Weekly Oil Bulletin (Monday) ──")
+        print("\n── EU Oil Bulletin (Monday) ──")
         results["eu_bulletin"] = fetch_eu_bulletin()
     else:
         results["eu_bulletin"] = None
 
     # Summary
     print(f"\n{'─'*60}")
-    print("RESULTS SUMMARY:")
     succeeded = sum(1 for v in results.values() if v is not None)
-    total = sum(1 for k, v in results.items() if k != "eu_bulletin" or WEEKDAY == 0)
-    print(f"  {succeeded}/{total} sources fetched successfully")
+    total = sum(1 for k in results if k != "eu_bulletin" or WEEKDAY == 0)
+    print(f"RESULTS: {succeeded}/{total} sources OK")
     for k, v in results.items():
-        status = "✅" if v else "❌"
-        print(f"  {status} {k}: {v if v else 'FAILED'}")
+        print(f"  {'✅' if v else '❌'} {k}")
     print(f"{'─'*60}\n")
 
-    # Write to Excel
     print("── Updating Excel ──")
-    success = update_excel(
-        fx=results.get("fx"),
-        orlen_pl=results.get("orlen_pl"),
-        orlen_lt=results.get("orlen_lt"),
-        elvis_de=results.get("elvis_de"),
-        bsh_se=results.get("bsh_se"),
-        eu_bulletin=results.get("eu_bulletin"),
-    )
+    ok = update_excel(**results)
 
-    if success:
-        print("\n✅ Excel updated successfully!")
-    else:
-        print("\n❌ Excel update failed!")
-        sys.exit(1)
-
-    # Write results to JSON for GitHub Actions summary
-    summary_path = Path(__file__).parent.parent / "latest_results.json"
+    # Write JSON summary
     summary = {
-        "date": TODAY,
+        "date": TODAY_STR,
         "results": {k: bool(v) for k, v in results.items()},
         "data": {k: v for k, v in results.items() if v is not None},
     }
-    summary_path.write_text(json.dumps(summary, indent=2, default=str))
-    print(f"Summary written to {summary_path}")
+    Path(EXCEL_PATH.parent / "latest_results.json").write_text(json.dumps(summary, indent=2, default=str))
+
+    if ok:
+        print("\n✅ Done!")
+    else:
+        print("\n❌ Failed!")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
