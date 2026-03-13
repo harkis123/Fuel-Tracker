@@ -127,9 +127,8 @@ def parse_orlen_lt_pdf(pdf_bytes):
                     selling_price = cleaned[-1]
                     if 1000 < selling_price < 2500:
                         eur_l = round(selling_price / 1000, 4)
-                        log("Orlen LT", f"Juodeikiai: {selling_price} EUR/1000l → {eur_l} EUR/l (su PVM)")
+                        log("Orlen LT", f"Juodeikiai: {selling_price} EUR/1000l = {eur_l} EUR/l (su PVM)")
                         return {"price_eur_l": eur_l}
-                # First match = Juodeikiai terminal
                 break
     except ImportError:
         log("Orlen LT", "pdfplumber not installed", "WARN")
