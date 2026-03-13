@@ -85,7 +85,7 @@ const mecfsColor=mecfs==null?'var(--t4)':mecfs===0?'var(--green)':mecfs<=3?'var(
 document.getElementById('kpi').innerHTML=ks.map(k=>{const tc=k.tr>.05?'up':k.tr<-.05?'dn':'';const ti=k.tr>.05?'▲':k.tr<-.05?'▼':'';const tv=k.tr!=null?`<span class="kpi-tr ${tc}">${ti} ${Math.abs(k.tr).toFixed(1)}%</span>`:'';return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;}).join('')+
 (()=>{
 const mecfsHist=D.slice(0,30).reverse().map(r=>({date:r.date,v:calcMecfs(r.plnM3)})).filter(r=>r.v!=null);
-const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>r.v),mecfsColor,220,36):'';
+const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>({v:r.v,label:`${r.date}: ${r.v.toFixed(1)}%`})),mecfsColor,220,36):'';
 const prevMecfs=calcMecfs((D[1]||{}).plnM3);
 const mDelta=mecfs!=null&&prevMecfs!=null?mecfs-prevMecfs:null;
 const mTrHtml=mDelta!=null&&mDelta!==0?`<span class="kpi-tr ${mDelta>0?'up':'dn'}">${mDelta>0?'▲':'▼'} ${Math.abs(mDelta).toFixed(1)}pp</span>`:'';
@@ -93,7 +93,11 @@ return`<div class="kpi" style="grid-column:span 2;animation-delay:.3s"><div clas
 })();
 
 const sp=[{l:'Orlen LT',k:'ltEur',h:'#06b6d4'},{l:'Orlen PL (EUR)',k:'plEur',h:'#f97316'},{l:'Elvis DE',k:'deEur',h:'#a855f7'},{l:'BSH SE (EUR)',k:'seEur',h:'#2dd4bf'}];
-document.getElementById('spk').innerHTML=sp.map(s=>{const v=D.slice(0,14).reverse().map(r=>r[s.k]).filter(x=>x!=null);const lv=v.length?v[v.length-1].toFixed(3):'—';return`<div class="sr"><div class="sr-l"><div class="sr-d" style="background:${s.h}"></div>${s.l}</div>${sk(v,s.h,125,34)}<div class="sr-v">${lv}</div></div>`;}).join('');
+document.getElementById('spk').innerHTML=sp.map(s=>{
+  const pts=D.slice(0,14).reverse().map(r=>r[s.k]!=null?{v:r[s.k],label:r.date}:null).filter(x=>x);
+  const lv=pts.length?pts[pts.length-1].v.toFixed(3):'—';
+  return`<div class="sr"><div class="sr-l"><div class="sr-d" style="background:${s.h}"></div>${s.l}</div>${sk(pts,s.h,125,34)}<div class="sr-v">${lv}</div></div>`;
+}).join('');
 
 const cc=['LT','LV','EE','DK','SE','FI'],bc=['#f97316','#06b6d4','#a855f7','#2dd4bf','#f59e0b','#ef4444'];
 const ev=cc.map(c=>E[c]||0),mx=Math.max(...ev,.001);
@@ -122,9 +126,55 @@ wt+='</tbody></table>';document.getElementById('wt').innerHTML=wt;
 document.getElementById('sg').innerHTML=[
 {n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'fuel-prices.eu',c:'#f59e0b',t:'Diesel LT/LV/EE/DK/SE/FI ✅ Auto'},{n:'Elvis DE — Diesel',u:'fuel-prices.eu/Germany',c:'#a855f7',t:'EC Oil Bulletin Diesel ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR ✅ Auto'}
 ].map(s=>`<div class="sc" style="border-left-color:${s.c}"><div class="sc-n">${s.n}</div><div class="sc-u">${s.u}</div><div class="sc-nt">${s.t}</div></div>`).join('')+
-`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password → modify values → 💾 Save downloads Excel.</p></div>`;}
+`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password → modify values → 💾 Save downloads Excel.</p></div>`;
+setTimeout(attachSpkEvents,0);}
 
-function sk(data,color,w,h){if(!data||data.length<2)return`<svg width="${w}" height="${h}" style="opacity:.3"><text x="${w/2}" y="${h/2+3}" text-anchor="middle" fill="#64748b" font-size="8">—</text></svg>`;const mn=Math.min(...data),mx=Math.max(...data),rg=mx-mn||1;const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-mn)/rg)*(h-6)-3}`).join(' ');const ly=h-((data[data.length-1]-mn)/rg)*(h-6)-3;const id=color.replace('#','');return`<svg width="${w}" height="${h}"><defs><linearGradient id="g${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".2"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><polygon points="0,${h} ${pts} ${w},${h}" fill="url(#g${id})"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${w}" cy="${ly}" r="2.5" fill="${color}"/></svg>`;}
+// Shared tooltip element
+const _tt=(()=>{const d=document.createElement('div');d.style.cssText='position:fixed;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--M,monospace);color:#f1f5f9;pointer-events:none;z-index:9999;opacity:0;transition:opacity .15s;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)';document.body.appendChild(d);return d;})();
+function _showTT(e,html){_tt.innerHTML=html;_tt.style.opacity='1';_moveTT(e);}
+function _moveTT(e){const x=e.clientX,y=e.clientY,w=_tt.offsetWidth;_tt.style.left=(x+14+w>window.innerWidth?x-w-10:x+14)+'px';_tt.style.top=(y-36)+'px';}
+function _hideTT(){_tt.style.opacity='0';}
+
+// sk: data = array of numbers OR {v,label} objects; color, w, h
+function sk(data,color,w,h){
+  if(!data||data.length<2)return`<svg width="${w}" height="${h}" style="opacity:.3"><text x="${w/2}" y="${h/2+3}" text-anchor="middle" fill="#64748b" font-size="8">—</text></svg>`;
+  const vals=data.map(d=>typeof d==='object'?d.v:d);
+  const labels=data.map((d,i)=>typeof d==='object'?d.label:null);
+  const mn=Math.min(...vals),mx=Math.max(...vals),rg=mx-mn||1;
+  const px=(i)=>(i/(vals.length-1))*w;
+  const py=(v)=>h-((v-mn)/rg)*(h-6)-3;
+  const pts=vals.map((v,i)=>`${px(i)},${py(v)}`).join(' ');
+  const ly=py(vals[vals.length-1]);
+  const uid='sk'+Math.random().toString(36).slice(2,7);
+  // invisible hit rects for each data point
+  const hits=vals.map((v,i)=>{
+    const cx=px(i),cy=py(v),lbl=labels[i]?`<span style="color:#94a3b8">${labels[i]}</span><br/>`:'';
+    return`<rect x="${Math.max(0,cx-w/vals.length/2)}" y="0" width="${w/vals.length}" height="${h}" fill="transparent" data-v="${v.toFixed(3)}" data-l="${labels[i]||''}" data-cx="${cx}" data-cy="${cy}" data-c="${color}"/>`;
+  }).join('');
+  return`<svg width="${w}" height="${h}" class="spk-svg" style="cursor:crosshair;overflow:visible"><defs><linearGradient id="g${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".2"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><polygon points="0,${h} ${pts} ${w},${h}" fill="url(#g${uid})"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${px(vals.length-1)}" cy="${ly}" r="2.5" fill="${color}"/><circle class="spk-dot" cx="-99" cy="-99" r="3.5" fill="${color}" stroke="#0a0e1a" stroke-width="1.5" style="pointer-events:none"/><line class="spk-vl" x1="-99" y1="0" x2="-99" y2="${h}" stroke="${color}" stroke-width="1" stroke-dasharray="2,2" opacity=".5" style="pointer-events:none"/>${hits}</svg>`;
+}
+
+// Attach tooltip events to sparklines after render
+function attachSpkEvents(){
+  document.querySelectorAll('.spk-svg').forEach(svg=>{
+    svg.querySelectorAll('rect[data-v]').forEach(rect=>{
+      rect.addEventListener('mouseenter',e=>{
+        const dot=svg.querySelector('.spk-dot'),vl=svg.querySelector('.spk-vl');
+        if(dot){dot.setAttribute('cx',rect.dataset.cx);dot.setAttribute('cy',rect.dataset.cy);}
+        if(vl){vl.setAttribute('x1',rect.dataset.cx);vl.setAttribute('x2',rect.dataset.cx);}
+        const lbl=rect.dataset.l?`<span style="color:#64748b;font-size:10px">${rect.dataset.l}</span><br>`:'';
+        _showTT(e,`${lbl}<span style="color:${rect.dataset.c};font-weight:700">${rect.dataset.v}</span>`);
+      });
+      rect.addEventListener('mousemove',_moveTT);
+      rect.addEventListener('mouseleave',()=>{
+        const dot=svg.querySelector('.spk-dot'),vl=svg.querySelector('.spk-vl');
+        if(dot){dot.setAttribute('cx','-99');dot.setAttribute('cy','-99');}
+        if(vl){vl.setAttribute('x1','-99');vl.setAttribute('x2','-99');}
+        _hideTT();
+      });
+    });
+  });
+}
 
 function downloadExcel(){if(!D.length&&!W.length){alert('No data');return;}const wb=XLSX.utils.book_new();
 const d1=[["Data","Šaltinis","Kaina","Valiuta","Kaina EUR/l"]];D.forEach(r=>{if(r.ltEur!=null)d1.push([r.date,"Orlen LT",r.ltEur,"EUR/l",r.ltEur]);if(r.plEur!=null)d1.push([r.date,"Orlen PL",r.plEur,"EUR/l",r.plEur]);if(r.deEur!=null)d1.push([r.date,"Elvis DE Diesel",r.deEur,"EUR/l",r.deEur]);if(r.seEur!=null)d1.push([r.date,"BSH/ST1 SE",r.seEur,"EUR/l",r.seEur]);});
