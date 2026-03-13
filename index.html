@@ -16,9 +16,9 @@
 <div class="ub" id="ub">⏳ Loading...</div>
 <div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values in Daily Data to edit <button class="sb" onclick="saveEdits()">💾 Save Excel</button> <button class="cb" onclick="cancelEdit()">Cancel</button></div>
 <main class="main">
-<section id="tab-dash"><div class="gk" id="kpi"></div><div class="g2"><div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div><div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div></div></section>
-<section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
-<section id="tab-weekly" class="hidden"><div class="stt">EU Weekly Oil Bulletin <span class="c" id="wc"></span></div><div class="pnl"><div class="tw" id="wt"></div></div></section>
+<section id="tab-dash"><div style="display:flex;justify-content:flex-end;margin-bottom:12px" id="vat-dash"></div><div class="gk" id="kpi"></div><div class="g2"><div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div><div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div></div></section>
+<section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span><div id="vat-daily"></div></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
+<section id="tab-weekly" class="hidden"><div class="stt">EU Weekly Oil Bulletin <span class="c" id="wc"></span><div id="vat-weekly"></div></div><div class="pnl"><div class="tw" id="wt"></div></div></section>
 <section id="tab-src" class="hidden"><div class="stt">Data Sources</div><div class="sg" id="sg"></div></section>
 </main></div>
 <div class="mo hidden" id="pm"><div class="md"><h3>🔐 Edit Password</h3><div class="me hidden" id="pe">Wrong password</div><input type="password" id="pi" placeholder="Password..." onkeydown="if(event.key==='Enter')ck()"><button class="mb" onclick="ck()">Unlock</button></div></div>
@@ -26,6 +26,14 @@
 const REPO="harkis123/Fuel-Tracker",FILE="fuel_tracker.xlsx";
 const URL_=()=>`https://raw.githubusercontent.com/${REPO}/main/${FILE}?t=${Date.now()}`;
 let D=[],W=[],EM=false;
+// VAT rates per country (as multiplier divisor, e.g. 1.21 for 21%)
+const VAT={LT:1.21,PL:1.23,DE:1.19,SE:1.25,LV:1.21,EE:1.22,DK:1.25,FI:1.255,EU:1.0};
+// Per-tab VAT toggle state (true = su PVM, false = be PVM)
+const SHOW_VAT={dash:true,daily:true,weekly:true};
+function exVat(v,rate){return v!=null?v/rate:null;}
+function applyVat(v,rate,showVat){return showVat?v:exVat(v,rate);}
+function vatToggleHtml(tab){const on=SHOW_VAT[tab];return`<div style="display:flex;align-items:center;gap:6px;font-size:10px"><span style="color:var(--t5)">Kaina:</span><button onclick="toggleVat('${tab}')" style="display:flex;background:var(--bg4);border:1px solid var(--brd2);border-radius:20px;padding:2px;cursor:pointer;gap:2px"><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${on?'background:var(--bg2);color:var(--t1);box-shadow:0 1px 4px rgba(0,0,0,.4)':'color:var(--t5)'}">su PVM</span><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${!on?'background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(59,130,246,.4)':'color:var(--t5)'}">be PVM</span></button></div>`;}
+function toggleVat(tab){SHOW_VAT[tab]=!SHOW_VAT[tab];render();}
 
 document.querySelectorAll('.nav-b').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav-b').forEach(x=>x.classList.remove('on'));b.classList.add('on');['dash','daily','weekly','src'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hidden',t!==b.dataset.t));}));
 
@@ -75,8 +83,19 @@ function pc(a,b){return(a&&b&&b!==0)?((a-b)/b)*100:null}
 
 function render(){
 const L=D[0]||{},P=D[1]||{},E=W[0]||{};
-const pd=L.plEur!=null&&L.ltEur!=null?L.plEur-L.ltEur:null;
-const ks=[{l:'ORLEN LT',v:f(L.ltEur),tr:pc(L.ltEur,P.ltEur),s:'EUR/l',c:'var(--cyan)',i:'🇱🇹'},{l:'ORLEN PL → EUR',v:f(L.plEur),tr:pc(L.plEur,P.plEur),s:'EUR/l',c:'var(--orange)',i:'🇵🇱'},{l:'Δ PL vs LT',v:pd!=null?(pd>0?'+':'')+pd.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},{l:'ELVIS DE',v:f(L.deEur),tr:pc(L.deEur,P.deEur),s:'EUR/l',c:'var(--purple)',i:'🇩🇪'},{l:'BSH/ST1 SE',v:f(L.seEur),tr:pc(L.seEur,P.seEur),s:'EUR/l',c:'var(--teal)',i:'🇸🇪'}];
+// Inject VAT toggles
+['dash','daily','weekly'].forEach(t=>{const el=document.getElementById('vat-'+t);if(el)el.innerHTML=vatToggleHtml(t);});
+
+// Dashboard: apply VAT toggle to displayed values
+const sv=SHOW_VAT.dash;
+const ltV=applyVat(L.ltEur,VAT.LT,sv), ltVP=applyVat(P.ltEur,VAT.LT,sv);
+const plV=applyVat(L.plEur,VAT.PL,sv), plVP=applyVat(P.plEur,VAT.PL,sv);
+const deV=applyVat(L.deEur,VAT.DE,sv), deVP=applyVat(P.deEur,VAT.DE,sv);
+const seV=applyVat(L.seEur,VAT.SE,sv), seVP=applyVat(P.seEur,VAT.SE,sv);
+const pdV=ltV!=null&&plV!=null?plV-ltV:null;
+const vatLbl=sv?'su PVM':'be PVM';
+
+const ks=[{l:'ORLEN LT',v:f(ltV),tr:pc(ltV,ltVP),s:`EUR/l ${vatLbl}`,c:'var(--cyan)',i:'🇱🇹'},{l:'ORLEN PL → EUR',v:f(plV),tr:pc(plV,plVP),s:`EUR/l ${vatLbl}`,c:'var(--orange)',i:'🇵🇱'},{l:'Δ PL vs LT',v:pdV!=null?(pdV>0?'+':'')+pdV.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},{l:'ELVIS DE',v:f(deV),tr:pc(deV,deVP),s:`EUR/l ${vatLbl}`,c:'var(--purple)',i:'🇩🇪'},{l:'BSH/ST1 SE',v:f(seV),tr:pc(seV,seVP),s:`EUR/l ${vatLbl}`,c:'var(--teal)',i:'🇸🇪'}];
 // MECFS calculation: base 4694 PLN/1000L, step 78 PLN = +0.5%
 const MECFS_BASE=4694,MECFS_STEP=78,MECFS_MAX_PCT=15;
 function calcMecfs(plnM3){if(!plnM3)return null;const steps=Math.floor((plnM3-MECFS_BASE)/MECFS_STEP);return Math.max(0,Math.min(steps*0.5,MECFS_MAX_PCT));}
@@ -100,36 +119,52 @@ const weekRange=weekStart&&weekEnd&&weekStart!==weekEnd?`${weekStart} – ${week
 return`<div class="kpi" style="grid-column:1/-1;animation-delay:.3s"><div class="kpi-ac" style="background:${mecfsColor}"></div><div class="kpi-ico">⚡</div><div class="kpi-lbl">Middle East Crisis Fuel Surcharge (MECFS) — savaitės vidurkis</div><div style="display:flex;align-items:center;justify-content:space-between;padding-left:12px;padding-right:8px"><div style="display:flex;align-items:baseline;gap:10px"><div class="kpi-val" style="color:${mecfsColor}">${mecfs!=null?mecfs.toFixed(1)+'%':'—'}</div><div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${weekRange}</span></div>${mTrHtml}</div><div style="opacity:.85">${histSpk}</div></div><div style="padding:8px 12px 4px"><div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t5);margin-bottom:4px"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div><div style="background:var(--bg4);border-radius:4px;height:8px;overflow:hidden;border:1px solid var(--brd2)"><div style="height:100%;width:${mecfs!=null?(mecfs/MECFS_MAX_PCT)*100:0}%;background:linear-gradient(90deg,var(--green),var(--amber),var(--orange),var(--red));border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1)"></div></div><div style="font-size:9px;color:var(--t5);margin-top:5px">Bazė: ${MECFS_BASE} PLN/1000L · žingsnis: ${MECFS_STEP} PLN = +0.5% · max: ${MECFS_MAX_PCT}% · ${mecfsHist.length} savaičių istorija</div></div></div>`;
 })();
 
-const sp=[{l:'Orlen LT',k:'ltEur',h:'#06b6d4'},{l:'Orlen PL (EUR)',k:'plEur',h:'#f97316'},{l:'Elvis DE',k:'deEur',h:'#a855f7'},{l:'BSH SE (EUR)',k:'seEur',h:'#2dd4bf'}];
+const sp=[{l:'Orlen LT',k:'ltEur',vr:VAT.LT,h:'#06b6d4'},{l:'Orlen PL (EUR)',k:'plEur',vr:VAT.PL,h:'#f97316'},{l:'Elvis DE',k:'deEur',vr:VAT.DE,h:'#a855f7'},{l:'BSH SE (EUR)',k:'seEur',vr:VAT.SE,h:'#2dd4bf'}];
 document.getElementById('spk').innerHTML=sp.map(s=>{
-  const pts=D.slice(0,14).reverse().map(r=>r[s.k]!=null?{v:r[s.k],label:r.date}:null).filter(x=>x);
+  const pts=D.slice(0,14).reverse().map(r=>{const raw=r[s.k];const v=applyVat(raw,s.vr,sv);return v!=null?{v,label:`${r.date}: ${v.toFixed(3)}`}:null;}).filter(x=>x);
   const lv=pts.length?pts[pts.length-1].v.toFixed(3):'—';
   return`<div class="sr"><div class="sr-l"><div class="sr-d" style="background:${s.h}"></div>${s.l}</div>${sk(pts,s.h,125,34)}<div class="sr-v">${lv}</div></div>`;
 }).join('');
 
 const cc=['LT','LV','EE','DK','SE','FI'],bc=['#f97316','#06b6d4','#a855f7','#2dd4bf','#f59e0b','#ef4444'];
-const ev=cc.map(c=>E[c]||0),mx=Math.max(...ev,.001);
-document.getElementById('eul').textContent=E.date?`${E.date}${E.EU?' | EU: '+E.EU.toFixed(3)+'€/l':''}`:W.length===0?'(laukiama duomenų)':'';
-document.getElementById('bch').innerHTML=cc.map((c,i)=>`<div class="bc"><div class="bv">${ev[i]>0?ev[i].toFixed(3):'—'}</div><div class="bar" style="height:${ev[i]>0?Math.max((ev[i]/mx)*155,3):4}px;background:${ev[i]>0?`linear-gradient(180deg,${bc[i]},${bc[i]}88)`:'var(--bg4)'};${ev[i]===0?'border:1px dashed var(--brd2)':''}"></div><div class="bl">${c}</div></div>`).join('');
+const evRaw=cc.map(c=>E[c]||0);
+const evShow=evRaw.map((v,i)=>v>0?applyVat(v,VAT[cc[i]]||1,sv):0);
+const mx=Math.max(...evShow,.001);
+const euAvgShow=E.EU?applyVat(E.EU,1,sv):null; // EU avg shown as-is (mixed countries)
+document.getElementById('eul').textContent=E.date?`${E.date}${euAvgShow?' | EU avg: '+euAvgShow.toFixed(3)+'€/l':''}  [${vatLbl}]`:W.length===0?'(laukiama duomenų)':'';
+document.getElementById('bch').innerHTML=cc.map((c,i)=>`<div class="bc"><div class="bv">${evShow[i]>0?evShow[i].toFixed(3):'—'}</div><div class="bar" style="height:${evShow[i]>0?Math.max((evShow[i]/mx)*155,3):4}px;background:${evShow[i]>0?`linear-gradient(180deg,${bc[i]},${bc[i]}88)`:'var(--bg4)'};${evShow[i]===0?'border:1px dashed var(--brd2)':''}"></div><div class="bl">${c}</div></div>`).join('');
 
 
+const sd=SHOW_VAT.daily;
+const dVatLbl=sd?'su PVM':'be PVM';
 document.getElementById('dc').textContent=`(${D.length})`;
-let dt='<table><thead><tr><th>Date</th><th>Day</th><th class="nm">Orlen LT</th><th class="nm">Orlen PL (€)</th><th class="nm">Δ PL–LT</th><th class="nm">Δ %</th><th class="nm">Elvis DE</th><th class="nm">BSH SE (€)</th><th>Notes</th></tr></thead><tbody>';
+let dt=`<table><thead><tr><th>Date</th><th>Day</th><th class="nm">Orlen LT (${dVatLbl})</th><th class="nm">Orlen PL € (${dVatLbl})</th><th class="nm">Δ PL–LT</th><th class="nm">Δ %</th><th class="nm">Elvis DE (${dVatLbl})</th><th class="nm">BSH SE € (${dVatLbl})</th><th>Notes</th></tr></thead><tbody>`;
 if(!D.length)dt+='<tr><td colspan="9" class="emp">No data</td></tr>';
-D.forEach(r=>{const d=r.delta,dc=d!=null?(d<0?'ng':d>0?'ps':''):'';const dp=r.deltaPct;
-dt+=`<tr><td class="bd">${r.date}</td><td>${r.day}</td>`;
-dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.ltEur!=null?r.ltEur:''}" onchange="onEdit('${r.date}','ltEur',this)">`:f(r.ltEur)}</td>`;
-dt+=`<td class="nm">${f(r.plEur)}</td><td class="nm ${dc}">${d!=null?(d>0?'+':'')+d.toFixed(3):'—'}</td><td class="nm ${dc}">${dp!=null?(dp>0?'+':'')+(dp*100).toFixed(1)+'%':'—'}</td>`;
-dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.deEur!=null?r.deEur:''}" onchange="onEdit('${r.date}','deEur',this)">`:f(r.deEur)}</td>`;
-dt+=`<td class="nm">${f(r.seEur)}</td><td>${r.notes}</td></tr>`;});
+D.forEach(r=>{
+  const ltD=applyVat(r.ltEur,VAT.LT,sd), plD=applyVat(r.plEur,VAT.PL,sd);
+  const deD=applyVat(r.deEur,VAT.DE,sd), seD=applyVat(r.seEur,VAT.SE,sd);
+  const dlt=ltD!=null&&plD!=null?plD-ltD:null;
+  const dltP=dlt!=null&&ltD?dlt/ltD:null;
+  const dc=dlt!=null?(dlt<0?'ng':dlt>0?'ps':''):'';
+  dt+=`<tr><td class="bd">${r.date}</td><td>${r.day}</td>`;
+  dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.ltEur!=null?r.ltEur:''}" onchange="onEdit('${r.date}','ltEur',this)">`:f(ltD)}</td>`;
+  dt+=`<td class="nm">${f(plD)}</td><td class="nm ${dc}">${dlt!=null?(dlt>0?'+':'')+dlt.toFixed(3):'—'}</td><td class="nm ${dc}">${dltP!=null?(dltP>0?'+':'')+(dltP*100).toFixed(1)+'%':'—'}</td>`;
+  dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.deEur!=null?r.deEur:''}" onchange="onEdit('${r.date}','deEur',this)">`:f(deD)}</td>`;
+  dt+=`<td class="nm">${f(seD)}</td><td>${r.notes}</td></tr>`;});
 dt+='</tbody></table>';document.getElementById('dt').innerHTML=dt;
 
+const sw=SHOW_VAT.weekly;
+const wVatLbl=sw?'su PVM':'be PVM';
 document.getElementById('wc').textContent=`(${W.length})`;
-let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}</th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
+let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}<br><span style="font-size:8px;color:var(--t5)">${((VAT[c]||1)-1)*100|0}% PVM</span></th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
 if(!W.length)wt+=`<tr><td colspan="${cc.length+3}" class="emp">No data</td></tr>`;
-W.forEach(r=>{const d=(r.LT&&r.EU)?((r.LT-r.EU)/r.EU)*100:null;const lc=d!=null?(d<0?'ng':d>0?'ps':''):'';
-wt+=`<tr><td class="bd">${r.date}</td>${cc.map(c=>`<td class="nm">${f(r[c])}</td>`).join('')}<td class="nm">${f(r.EU)}</td><td class="nm ${lc}">${d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'}</td></tr>`;});
-wt+='</tbody></table>';document.getElementById('wt').innerHTML=wt;
+W.forEach(r=>{
+  const vals=cc.map(c=>{const raw=r[c];return raw?applyVat(raw,VAT[c]||1,sw):null;});
+  const ltW=vals[0], euW=r.EU?applyVat(r.EU,1,sw):null;
+  const d=(ltW&&euW)?((ltW-euW)/euW)*100:null;
+  const lc=d!=null?(d<0?'ng':d>0?'ps':''):'';
+  wt+=`<tr><td class="bd">${r.date}</td>${vals.map(v=>`<td class="nm">${f(v)}</td>`).join('')}<td class="nm">${f(euW)}</td><td class="nm ${lc}">${d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'}</td></tr>`;});
+wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 
 document.getElementById('sg').innerHTML=[
 {n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'fuel-prices.eu',c:'#f59e0b',t:'Diesel LT/LV/EE/DK/SE/FI ✅ Auto'},{n:'Elvis DE — Diesel',u:'fuel-prices.eu/Germany',c:'#a855f7',t:'EC Oil Bulletin Diesel ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR ✅ Auto'}
