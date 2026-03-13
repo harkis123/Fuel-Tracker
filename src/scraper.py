@@ -115,58 +115,22 @@ def parse_orlen_lt_pdf(pdf_bytes):
     try:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                tables = page.extract_tables()
-                for table in tables:
-                    for row in table:
-                        if not row: continue
-                        row_str = " ".join([str(c) for c in row if c])
-                        row_lower = row_str.lower()
-                        
-                        # Match "Dyzelinas E kl. su RRME" row
-                        if "dyzelinas" not in row_lower: continue
-                        if "rrme" not in row_lower and "e kl" not in row_lower: continue
-                        
-                        log("Orlen LT", f"Found row: {row_str[:120]}")
-                        
-                        # Parse ALL numbers from this row using clean_num
-                        prices = []
-                        for cell in row:
-                            if cell is None: continue
-                            val = clean_num(cell)
-                            if val and val > 0:
-                                prices.append(val)
-                        
-                        log("Orlen LT", f"Parsed numbers: {prices}")
-                        
-                        # Pardavimo kaina su PVM is in EUR/1000l range (1000-2500)
-                        # It's the HIGHEST value in the row (base < with excise < with VAT)
-                        eur_1000l = [p for p in prices if 1000 < p < 2500]
-                        if eur_1000l:
-                            selling_price = max(eur_1000l)
-                            eur_l = selling_price / 1000
-                            log("Orlen LT", f"Pardavimo kaina su PVM = {selling_price} EUR/1000l → {eur_l:.3f} EUR/l")
-                            return {"price_eur_l": round(eur_l, 4)}
-                        
-                        # Maybe in EUR/l directly
-                        eur_l_vals = [p for p in prices if 0.8 < p < 3.0]
-                        if eur_l_vals:
-                            price = max(eur_l_vals)
-                            log("Orlen LT", f"Direct EUR/l = {price}")
-                            return {"price_eur_l": round(price, 4)}
-                
-                # Fallback: text search
-                text = page.extract_text() or ""
-                if "dyzelinas" in text.lower():
-                    log("Orlen LT", f"Trying text fallback...")
-                    # Find all numbers near "dyzelinas" that look like EUR/1000l
-                    matches = re.findall(r'(\d[\d\s]*[.,]\d{2})', text)
-                    for m in matches:
-                        val = clean_num(m)
-                        if val and 1000 < val < 2500:
-                            eur_l = val / 1000
-                            log("Orlen LT", f"Text fallback: {val} → {eur_l:.3f} EUR/l")
-                            return {"price_eur_l": round(eur_l, 4)}
+            text = pdf.pages[0].extract_text() or ""
+            for line in text.split('\n'):
+                if 'Dyzelinas E kl. su RRME' not in line:
+                    continue
+                # Extract numbers like "897.69" and "1 756.06"
+                nums = re.findall(r'(\d[\d ]*\.\d{2})', line)
+                cleaned = [float(n.replace(' ', '')) for n in nums]
+                if cleaned:
+                    # LAST number = Pardavimo kaina su PVM (EUR/1000l)
+                    selling_price = cleaned[-1]
+                    if 1000 < selling_price < 2500:
+                        eur_l = round(selling_price / 1000, 4)
+                        log("Orlen LT", f"Juodeikiai: {selling_price} EUR/1000l → {eur_l} EUR/l (su PVM)")
+                        return {"price_eur_l": eur_l}
+                # First match = Juodeikiai terminal
+                break
     except ImportError:
         log("Orlen LT", "pdfplumber not installed", "WARN")
     except Exception as e:
