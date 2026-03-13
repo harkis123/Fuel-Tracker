@@ -172,14 +172,16 @@ dt+='</tbody></table>';document.getElementById('dt').innerHTML=dt;
 const sw=SHOW_VAT.weekly;
 const wVatLbl=sw?'su PVM':'be PVM';
 document.getElementById('wc').textContent=`(${W.length})`;
-let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}<br><span style="font-size:8px;color:var(--t5)">${((VAT[c]||1)-1)*100|0}% PVM</span></th>`).join('')}${sw?`<th class="nm">EU Avg</th><th class="nm">LT vs EU</th>`:''}</tr></thead><tbody>`;
-if(!W.length)wt+=`<tr><td colspan="${cc.length+(sw?3:1)}" class="emp">No data</td></tr>`;
+let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}<br><span style="font-size:8px;color:var(--t5)">${((VAT[c]||1)-1)*100|0}% PVM</span></th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
+if(!W.length)wt+=`<tr><td colspan="${cc.length+3}" class="emp">No data</td></tr>`;
 W.forEach(r=>{
   const vals=cc.map(c=>{const raw=r[c];return raw?applyVat(raw,VAT[c]||1,sw):null;});
   const ltW=vals[0], euW=r.EU?applyVat(r.EU,1,sw):null;
   const d=(ltW&&euW)?((ltW-euW)/euW)*100:null;
   const lc=d!=null?(d<0?'ng':d>0?'ps':''):'';
-  wt+=`<tr><td class="bd">${r.date}</td>${vals.map(v=>`<td class="nm">${f(v)}</td>`).join('')}${sw?`<td class="nm">${f(euW)}</td><td class="nm ${lc}">${d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'}</td>`:''}</tr>`;});
+  const euCell=sw?f(euW):`<span style="color:var(--t5);font-size:9px">—</span>`;
+  const ltEuCell=sw?(d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'):`<span style="color:var(--t5);font-size:9px" title="Neprilyginama be PVM">N/A</span>`;
+  wt+=`<tr><td class="bd">${r.date}</td>${vals.map(v=>`<td class="nm">${f(v)}</td>`).join('')}<td class="nm">${euCell}</td><td class="nm ${sw?lc:''}">${ltEuCell}</td></tr>`;});
 wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 
 document.getElementById('sg').innerHTML=[
