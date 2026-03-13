@@ -56,10 +56,10 @@ D=Object.values(bd).map(v=>v.r).sort((a,b)=>b.date.localeCompare(a.date));}
 
 if(wb.SheetNames.includes('Weekly Oil Bulletin')){
 const raw=XLSX.utils.sheet_to_json(wb.Sheets['Weekly Oil Bulletin'],{header:1,defval:null});
-let hi=0;for(let i=0;i<10;i++){if(raw[i]&&String(raw[i][0]).includes('Week')){hi=i;break;}}
+let hi=0;for(let i=0;i<15;i++){if(!raw[i])continue;const v=String(raw[i][0]||'').toLowerCase();if(v.includes('week')||v.includes('data')||v.includes('date')){hi=i;break;}if(raw[i][0] instanceof Date){hi=Math.max(0,i-1);break;}}
 let aw=[];for(let i=hi+1;i<raw.length;i++){const r=raw[i];if(!r||!r[0])continue;
-const dt=r[0] instanceof Date?r[0].toISOString().split('T')[0]:String(r[0]).substring(0,10);
-if(!dt||dt.length<8)continue;
+let dt='';if(r[0] instanceof Date){dt=r[0].toISOString().split('T')[0];}else{const s=String(r[0]).substring(0,10);if(/\d{4}-\d{2}-\d{2}/.test(s))dt=s;else continue;}
+if(!dt||dt.length<10)continue;
 aw.push({date:dt,LT:nn(r[1]),LV:nn(r[2]),EE:nn(r[3]),DK:nn(r[4]),SE:nn(r[5]),FI:nn(r[6]),EU:nn(r[7])});}
 const bw={};aw.forEach(r=>{const c=[r.LT,r.LV,r.EE,r.DK,r.SE,r.FI].filter(v=>v!=null).length;if(!bw[r.date]||c>bw[r.date].c)bw[r.date]={r,c};});
 W=Object.values(bw).map(v=>v.r).sort((a,b)=>b.date.localeCompare(a.date));}
@@ -84,8 +84,9 @@ document.getElementById('spk').innerHTML=sp.map(s=>{const v=D.slice(0,14).revers
 
 const cc=['LT','LV','EE','DK','SE','FI'],bc=['#f97316','#06b6d4','#a855f7','#2dd4bf','#f59e0b','#ef4444'];
 const ev=cc.map(c=>E[c]||0),mx=Math.max(...ev,.001);
-document.getElementById('eul').textContent=E.date?`${E.date}${E.EU?' | EU: '+E.EU.toFixed(3)+'€/l':''}`:'';
-document.getElementById('bch').innerHTML=ev.some(x=>x>0)?cc.map((c,i)=>`<div class="bc"><div class="bv">${ev[i]>0?ev[i].toFixed(3):'—'}</div><div class="bar" style="height:${Math.max((ev[i]/mx)*155,3)}px;background:linear-gradient(180deg,${bc[i]},${bc[i]}88)"></div><div class="bl">${c}</div></div>`).join(''):'<div class="emp">No EU data</div>';
+document.getElementById('eul').textContent=E.date?`${E.date}${E.EU?' | EU: '+E.EU.toFixed(3)+'€/l':''}`:W.length===0?'(laukiama duomenų)':'';
+document.getElementById('bch').innerHTML=cc.map((c,i)=>`<div class="bc"><div class="bv">${ev[i]>0?ev[i].toFixed(3):'—'}</div><div class="bar" style="height:${ev[i]>0?Math.max((ev[i]/mx)*155,3):4}px;background:${ev[i]>0?`linear-gradient(180deg,${bc[i]},${bc[i]}88)`:'var(--bg4)'};${ev[i]===0?'border:1px dashed var(--brd2)':''}"></div><div class="bl">${c}</div></div>`).join('');
+
 
 document.getElementById('dc').textContent=`(${D.length})`;
 let dt='<table><thead><tr><th>Date</th><th>Day</th><th class="nm">Orlen LT</th><th class="nm">Orlen PL (€)</th><th class="nm">Δ PL–LT</th><th class="nm">Δ %</th><th class="nm">Elvis DE</th><th class="nm">BSH SE (€)</th><th>Notes</th></tr></thead><tbody>';
