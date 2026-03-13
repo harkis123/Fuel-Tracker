@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '30 8 * * 1-5'
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Run historical backfill (2026-02 to today)?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: write
@@ -23,7 +32,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       
-      - name: Run scraper
+      - name: Run backfill (if selected)
+        if: ${{ github.event.inputs.backfill == 'true' }}
+        run: python src/backfill.py
+      
+      - name: Run daily scraper
         run: python src/scraper.py
       
       - name: Commit and push
