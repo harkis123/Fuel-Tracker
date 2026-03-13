@@ -1,9 +1,6 @@
 """
-Fuel Price Tracker v4 — FINAL — All corrections applied
-- Orlen LT: pardavimo kaina su PVM (EUR/1000l ÷ 1000)
-- Elvis DE: Diesel from fuel-prices.eu (not Super E5 from mehr-tanken)
-- EU Bulletin: All country diesel prices from fuel-prices.eu/cheapest/
-- BSH SE: st1.se diesel SEK/l
+Fuel Price Tracker v5 — FINAL
+Fixes: Orlen LT "1 756.06" format, no duplicate dates, calculated values
 """
 import requests, json, re, os, sys, io, calendar
 from datetime import datetime, timedelta
@@ -21,6 +18,32 @@ WDAY = TODAY.weekday()
 
 def log(s, m, l="INFO"): print(f"[{l}] {s}: {m}")
 
+def clean_num(s):
+    """Parse numbers like '1 756.06', '6 192', '1,234.56', '1234,56'"""
+    if s is None: return None
+    s = str(s).strip()
+    # Remove currency symbols and whitespace-like chars
+    s = re.sub(r'[€$£\xa0]', '', s)
+    # Handle "1 756.06" — spaces as thousand separators, dot as decimal
+    if re.match(r'^\d[\d ]+\.\d+$', s):
+        s = s.replace(' ', '')
+        return float(s)
+    # Handle "1 756,06" — spaces as thousand sep, comma as decimal
+    if re.match(r'^\d[\d ]+,\d+$', s):
+        s = s.replace(' ', '').replace(',', '.')
+        return float(s)
+    # Handle "1,234.56"
+    if ',' in s and '.' in s:
+        s = s.replace(',', '')
+        return float(s)
+    # Handle "1234,56"
+    if ',' in s and '.' not in s:
+        s = s.replace(',', '.')
+    # Remove remaining spaces
+    s = s.replace(' ', '')
+    try: return float(s)
+    except: return None
+
 # ═══════════════════════════════════════
 # 1. FX RATES
 # ═══════════════════════════════════════
@@ -35,7 +58,7 @@ def fetch_fx():
         log("FX", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# 2. ORLEN PL — via petrodom.pl
+# 2. ORLEN PL
 # ═══════════════════════════════════════
 def fetch_orlen_pl():
     try:
@@ -48,12 +71,10 @@ def fetch_orlen_pl():
                 for i, cell in enumerate(cells):
                     if "ekodiesel" in cell.lower():
                         for j in range(i+1, min(i+3, len(cells))):
-                            try:
-                                price = float(re.sub(r'[^\d.]', '', cells[j].replace(" ","").replace(",",".").replace("\xa0","")))
-                                if 3000 < price < 10000:
-                                    log("Orlen PL", f"Ekodiesel = {price} PLN/m³")
-                                    return {"price_pln_m3": price}
-                            except: continue
+                            price = clean_num(cells[j])
+                            if price and 3000 < price < 10000:
+                                log("Orlen PL", f"Ekodiesel = {price} PLN/m³")
+                                return {"price_pln_m3": price}
         log("Orlen PL", "Not found", "WARN"); return None
     except Exception as e:
         log("Orlen PL", str(e), "ERROR"); return None
@@ -80,6 +101,7 @@ def fetch_orlen_lt():
                 pdf_links.append(f"https://www.orlenlietuva.lt/LT/Wholesale/Prices/Kainos {d.strftime('%Y %m %d')} realizacija internet.pdf")
         for pdf_url in pdf_links[:5]:
             try:
+                log("Orlen LT", f"Trying: {pdf_url.split('/')[-1]}")
                 r2 = requests.get(pdf_url, headers=H, timeout=15)
                 if r2.status_code == 200 and len(r2.content) > 500:
                     price = parse_orlen_lt_pdf(r2.content)
@@ -94,100 +116,86 @@ def parse_orlen_lt_pdf(pdf_bytes):
         import pdfplumber
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             for page in pdf.pages:
-                # Extract all tables
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
                         if not row: continue
-                        row_text = " ".join([str(c) for c in row if c]).lower()
-                        # Look for "Dyzelinas E" row
-                        if "dyzelinas" in row_text and ("rrme" in row_text or "e kl" in row_text):
-                            # Find the SELLING price with VAT — it's the LAST or largest price in the row
-                            # The protocol typically has: base price, with excise, with excise+VAT
-                            # We need "pardavimo kaina su PVM" = selling price with VAT
-                            prices = []
-                            for cell in row:
-                                if cell is None: continue
-                                try:
-                                    val = float(str(cell).replace(",", ".").replace(" ", ""))
-                                    if val > 0: prices.append(val)
-                                except: continue
-                            
-                            # Prices in protocol are typically in EUR/1000l
-                            # pardavimo kaina su PVM is the largest value (includes all taxes)
-                            eur_1000l_prices = [p for p in prices if 500 < p < 3000]
-                            if eur_1000l_prices:
-                                # Take the highest = with VAT
-                                selling_price = max(eur_1000l_prices)
-                                eur_l = selling_price / 1000
-                                log("Orlen LT", f"Dyzelinas E = {selling_price} EUR/1000l → {eur_l:.3f} EUR/l (su PVM)")
-                                return {"price_eur_l": round(eur_l, 4)}
-                            
-                            # Maybe price is already in EUR/l
-                            eur_l_prices = [p for p in prices if 0.8 < p < 3.0]
-                            if eur_l_prices:
-                                price = max(eur_l_prices)
-                                log("Orlen LT", f"Dyzelinas E = {price} EUR/l (su PVM)")
-                                return {"price_eur_l": round(price, 4)}
+                        row_str = " ".join([str(c) for c in row if c])
+                        row_lower = row_str.lower()
+                        
+                        # Match "Dyzelinas E kl. su RRME" row
+                        if "dyzelinas" not in row_lower: continue
+                        if "rrme" not in row_lower and "e kl" not in row_lower: continue
+                        
+                        log("Orlen LT", f"Found row: {row_str[:120]}")
+                        
+                        # Parse ALL numbers from this row using clean_num
+                        prices = []
+                        for cell in row:
+                            if cell is None: continue
+                            val = clean_num(cell)
+                            if val and val > 0:
+                                prices.append(val)
+                        
+                        log("Orlen LT", f"Parsed numbers: {prices}")
+                        
+                        # Pardavimo kaina su PVM is in EUR/1000l range (1000-2500)
+                        # It's the HIGHEST value in the row (base < with excise < with VAT)
+                        eur_1000l = [p for p in prices if 1000 < p < 2500]
+                        if eur_1000l:
+                            selling_price = max(eur_1000l)
+                            eur_l = selling_price / 1000
+                            log("Orlen LT", f"Pardavimo kaina su PVM = {selling_price} EUR/1000l → {eur_l:.3f} EUR/l")
+                            return {"price_eur_l": round(eur_l, 4)}
+                        
+                        # Maybe in EUR/l directly
+                        eur_l_vals = [p for p in prices if 0.8 < p < 3.0]
+                        if eur_l_vals:
+                            price = max(eur_l_vals)
+                            log("Orlen LT", f"Direct EUR/l = {price}")
+                            return {"price_eur_l": round(price, 4)}
                 
-                # Fallback: search in text
+                # Fallback: text search
                 text = page.extract_text() or ""
-                return find_lt_diesel_in_text(text)
+                if "dyzelinas" in text.lower():
+                    log("Orlen LT", f"Trying text fallback...")
+                    # Find all numbers near "dyzelinas" that look like EUR/1000l
+                    matches = re.findall(r'(\d[\d\s]*[.,]\d{2})', text)
+                    for m in matches:
+                        val = clean_num(m)
+                        if val and 1000 < val < 2500:
+                            eur_l = val / 1000
+                            log("Orlen LT", f"Text fallback: {val} → {eur_l:.3f} EUR/l")
+                            return {"price_eur_l": round(eur_l, 4)}
     except ImportError:
         log("Orlen LT", "pdfplumber not installed", "WARN")
     except Exception as e:
         log("Orlen LT", f"PDF error: {e}", "WARN")
     return None
 
-def find_lt_diesel_in_text(text):
-    """Fallback text search for Orlen LT diesel price"""
-    # Look for pattern: Dyzelinas E ... number around 1500-2000 (EUR/1000l with VAT)
-    patterns = [
-        r'[Dd]yzelinas\s+E[^0-9]{0,150}?(\d{4}[.,]\d{2})',  # e.g. 1801.40
-        r'su\s+PVM[^0-9]{0,50}?(\d{4}[.,]\d{2})',
-        r'(\d{4}[.,]\d{2})[^0-9]{0,30}su\s+PVM',
-    ]
-    for pat in patterns:
-        matches = re.findall(pat, text, re.IGNORECASE)
-        for m in matches:
-            val = float(m.replace(",", "."))
-            if 1000 < val < 2500:  # EUR/1000l range
-                eur_l = val / 1000
-                log("Orlen LT", f"Text: {val} EUR/1000l → {eur_l:.3f} EUR/l")
-                return {"price_eur_l": round(eur_l, 4)}
-    return None
-
 # ═══════════════════════════════════════
-# 4. ELVIS DE — Diesel from fuel-prices.eu (NOT Super E5!)
+# 4. ELVIS DE — DIESEL from fuel-prices.eu
 # ═══════════════════════════════════════
 def fetch_elvis_de():
-    """Get Germany DIESEL price from fuel-prices.eu (EC Oil Bulletin data)"""
     try:
         r = requests.get("https://www.fuel-prices.eu/cheapest/", headers=H, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        
-        # Find the diesel table (second table on the page)
         tables = soup.find_all("table")
         for table in tables:
-            table_text = table.get_text(" ", strip=True).lower()
-            if "diesel" not in table_text: continue
-            
+            if "diesel" not in table.get_text(" ", strip=True).lower(): continue
             for row in table.find_all("tr"):
                 cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
-                row_text = " ".join(cells).lower()
-                if "germany" in row_text or "DE" in " ".join(cells):
+                row_text = " ".join(cells)
+                if "germany" in row_text.lower() or " DE" in row_text:
                     for cell in cells:
-                        # Price format: €1.812 or 1.812
                         m = re.search(r'€?(\d\.\d{3})', cell)
                         if m:
                             price = float(m.group(1))
                             if 0.8 < price < 3.5:
-                                log("Elvis DE", f"Germany Diesel = {price} EUR/l (EC Oil Bulletin)")
+                                log("Elvis DE", f"Germany Diesel = {price} EUR/l")
                                 return {"price_eur_l": price}
-        
-        log("Elvis DE", "Germany Diesel not found in table", "WARN")
-        return None
+        log("Elvis DE", "Not found", "WARN"); return None
     except Exception as e:
         log("Elvis DE", str(e), "ERROR"); return None
 
@@ -198,8 +206,7 @@ def fetch_bsh_se():
     try:
         r = requests.get("https://st1.se/foretag/listpris", headers=H, timeout=20)
         r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        text = soup.get_text(" ", strip=True)
+        text = BeautifulSoup(r.text, "html.parser").get_text(" ", strip=True)
         for pat in [r'[Dd]iesel\s*(?:MK[123])?\s*[^0-9]{0,30}?(\d{1,2}[.,]\d{2})', r'(\d{1,2}[.,]\d{2})\s*(?:kr|SEK)[^0-9]{0,20}[Dd]iesel']:
             m = re.search(pat, text)
             if m:
@@ -212,60 +219,66 @@ def fetch_bsh_se():
         log("BSH SE", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# 6. EU BULLETIN — ALL countries from fuel-prices.eu
+# 6. EU BULLETIN — from fuel-prices.eu
 # ═══════════════════════════════════════
 def fetch_eu_bulletin():
-    """Fetch diesel prices for LT/LV/EE/DK/SE/FI + EU avg from fuel-prices.eu"""
     try:
         r = requests.get("https://www.fuel-prices.eu/cheapest/", headers=H, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        
         countries = {"LT": None, "LV": None, "EE": None, "DK": None, "SE": None, "FI": None}
-        cc_map = {
-            "lithuania": "LT", "latvia": "LV", "estonia": "EE",
-            "denmark": "DK", "sweden": "SE", "finland": "FI"
-        }
+        cc_map = {"lithuania":"LT","latvia":"LV","estonia":"EE","denmark":"DK","sweden":"SE","finland":"FI"}
         eu_avg = None
-        
-        tables = soup.find_all("table")
-        for table in tables:
-            table_text = table.get_text(" ", strip=True).lower()
-            if "diesel" not in table_text: continue
-            
+        for table in soup.find_all("table"):
+            if "diesel" not in table.get_text(" ", strip=True).lower(): continue
             for row in table.find_all("tr"):
                 cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
                 if len(cells) < 2: continue
-                row_text = cells[0].lower() + " " + cells[1].lower()
-                
+                rt = " ".join(cells[:2]).lower()
                 for name, cc in cc_map.items():
-                    if name in row_text:
+                    if name in rt:
                         for cell in cells:
                             m = re.search(r'€?(\d\.\d{3})', cell)
                             if m:
                                 val = float(m.group(1))
-                                if 0.5 < val < 3.5:
-                                    countries[cc] = val
-                                    break
-        
-        # EU average from page text
+                                if 0.5 < val < 3.5: countries[cc] = val; break
         text = soup.get_text(" ", strip=True)
         m = re.search(r'€(\d\.\d{3})/L\s+for\s+diesel', text)
-        if m:
-            eu_avg = float(m.group(1))
-        
-        found = {k: v for k, v in countries.items() if v is not None}
+        if m: eu_avg = float(m.group(1))
+        found = {k:v for k,v in countries.items() if v}
         if found:
-            log("EU Bulletin", f"Diesel prices: {found}, EU avg={eu_avg}")
+            log("EU Bulletin", f"{found}, avg={eu_avg}")
             return {**countries, "EU_AVG": eu_avg}
-        
-        log("EU Bulletin", "No countries found", "WARN")
-        return None
+        log("EU Bulletin", "Not found", "WARN"); return None
     except Exception as e:
         log("EU Bulletin", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# EXCEL WRITER — CALCULATED values (not formulas)
+# EXCEL: check if date already exists
+# ═══════════════════════════════════════
+def date_exists_in_daily(ws, target_date):
+    """Check if today's date already has data in Daily Tracker"""
+    for row in range(5, min(15, ws.max_row + 1)):
+        cell = ws.cell(row=row, column=1).value
+        if cell is None: continue
+        if hasattr(cell, 'date'):
+            if cell.date() == target_date.date(): return row
+        elif hasattr(cell, 'strftime'):
+            if cell.strftime('%Y-%m-%d') == target_date.strftime('%Y-%m-%d'): return row
+        elif isinstance(cell, str) and cell[:10] == target_date.strftime('%Y-%m-%d'):
+            return row
+    return None
+
+def date_exists_in_weekly(ws, monday):
+    for row in range(4, min(14, ws.max_row + 1)):
+        cell = ws.cell(row=row, column=1).value
+        if cell is None: continue
+        cell_date = cell.date() if hasattr(cell, 'date') else None
+        if cell_date and cell_date == monday.date(): return row
+    return None
+
+# ═══════════════════════════════════════
+# EXCEL WRITER
 # ═══════════════════════════════════════
 def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=None, eu_bulletin=None):
     if not EXCEL_PATH.exists():
@@ -274,83 +287,84 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 
     if "Daily Tracker" in wb.sheetnames:
         ws = wb["Daily Tracker"]
-        ws.insert_rows(5)
+        
+        # Check if today already exists — update instead of insert
+        existing_row = date_exists_in_daily(ws, TODAY)
+        if existing_row:
+            row = existing_row
+            log("Excel", f"Updating existing row {row} for {TODAY_STR}")
+        else:
+            ws.insert_rows(5)
+            row = 5
+            log("Excel", f"Inserting new row {row} for {TODAY_STR}")
+
         ifont = Font(name="Aptos", size=10, color="1D4ED8")
         ifill = PatternFill("solid", fgColor="EFF6FF")
         dfont = Font(name="Aptos", size=10, color="1F2937")
         brd = Border(left=Side("thin",color="D1D5DB"),right=Side("thin",color="D1D5DB"),top=Side("thin",color="D1D5DB"),bottom=Side("thin",color="D1D5DB"))
 
         def wc(col, val, fmt='General', font=dfont, fill=None):
-            c = ws.cell(row=5, column=col)
-            c.value = val; c.number_format = fmt; c.font = font; c.border = brd
+            c = ws.cell(row=row, column=col)
+            # Only overwrite if we have new data, keep existing if None
+            if val is not None or c.value is None:
+                c.value = val
+            c.number_format = fmt; c.font = font; c.border = brd
             c.alignment = Alignment(horizontal="right" if col > 2 else "center", vertical="center")
             if fill: c.fill = fill
 
         wc(1, TODAY, 'YYYY-MM-DD', Font(name="Aptos",size=10,bold=True,color="1F2937"))
         wc(2, calendar.day_abbr[WDAY], font=Font(name="Aptos",size=9,color="6B7280"))
-
-        # C: Orlen PL PLN/m³
         wc(3, orlen_pl["price_pln_m3"] if orlen_pl else None, '#,##0.00', ifont, ifill)
-        # D: PLN/EUR
         wc(4, fx["PLN_EUR"] if fx else None, '0.0000', ifont, ifill)
-        # E: Orlen PL EUR/l — CALCULATED
-        pl_eur_l = orlen_pl["price_pln_m3"] / fx["PLN_EUR"] / 1000 if (orlen_pl and fx and fx.get("PLN_EUR")) else None
-        wc(5, round(pl_eur_l, 4) if pl_eur_l else None, '0.000')
-        # F: Orlen LT EUR/l
+        
+        pl_eur_l = round(orlen_pl["price_pln_m3"] / fx["PLN_EUR"] / 1000, 4) if (orlen_pl and fx and fx.get("PLN_EUR")) else None
+        wc(5, pl_eur_l, '0.000')
+        
         lt_val = orlen_lt["price_eur_l"] if orlen_lt else None
         wc(6, lt_val, '0.000', ifont, ifill)
-        # G: Delta — CALCULATED
+        
         delta = round(pl_eur_l - lt_val, 4) if (pl_eur_l and lt_val) else None
         wc(7, delta, '+0.000;-0.000;"-"')
-        # H: Delta % — CALCULATED
         delta_pct = round(delta / lt_val, 4) if (delta is not None and lt_val) else None
         wc(8, delta_pct, '+0.0%;-0.0%;"-"')
-        # I: Elvis DE (Diesel!)
+        
         wc(9, elvis_de["price_eur_l"] if elvis_de else None, '0.000', ifont, ifill)
-        # J: BSH SEK
         wc(10, bsh_se["price_sek_l"] if bsh_se else None, '0.00', ifont, ifill)
-        # K: SEK/EUR
         wc(11, fx["SEK_EUR"] if fx else None, '0.0000', ifont, ifill)
-        # L: BSH EUR — CALCULATED
+        
         se_eur = round(bsh_se["price_sek_l"] / fx["SEK_EUR"], 4) if (bsh_se and fx and fx.get("SEK_EUR")) else None
         wc(12, se_eur, '0.000')
-
+        
         ok = [k for k,v in {"FX":fx,"PL":orlen_pl,"LT":orlen_lt,"DE":elvis_de,"SE":bsh_se}.items() if v]
         wc(13, f"Auto: {','.join(ok)}", font=Font(name="Aptos",size=9,color="6B7280"))
         wc(14, "Auto", font=Font(name="Aptos",size=8,color="9CA3AF"))
-        log("Excel", f"Daily row 5: {TODAY_STR} [{','.join(ok)}]")
+        log("Excel", f"Row {row}: {TODAY_STR} [{','.join(ok)}]")
 
-    # Weekly — runs every day now (not just Monday) since fuel-prices.eu updates weekly
+    # Weekly
     if eu_bulletin and "Weekly Oil Bulletin" in wb.sheetnames:
         ws_w = wb["Weekly Oil Bulletin"]
-        # Check if this week already has data
-        existing_date = ws_w.cell(row=4, column=1).value
         monday = TODAY - timedelta(days=WDAY)
-        already_exists = False
-        if existing_date:
-            if hasattr(existing_date, 'date'):
-                already_exists = existing_date.date() == monday.date()
-            elif isinstance(existing_date, str):
-                already_exists = existing_date[:10] == monday.strftime("%Y-%m-%d")
-        
-        if not already_exists:
-            ws_w.insert_rows(4)
-            ws_w.cell(row=4,column=1).value = monday
-            ws_w.cell(row=4,column=1).number_format = 'YYYY-MM-DD'
-            ws_w.cell(row=4,column=1).font = Font(name="Aptos",size=10,bold=True,color="1F2937")
-            col_map = {"LT":2,"LV":3,"EE":4,"DK":5,"SE":6,"FI":7,"EU_AVG":8}
-            for k,col in col_map.items():
-                val = eu_bulletin.get(k)
-                if val is not None:
-                    c = ws_w.cell(row=4,column=col)
-                    c.value = val; c.number_format = '0.000'
-                    c.font = Font(name="Aptos",size=10,color="1D4ED8")
-            lt_v = eu_bulletin.get("LT"); eu_v = eu_bulletin.get("EU_AVG")
-            ws_w.cell(row=4,column=9).value = round((lt_v-eu_v)/eu_v,4) if (lt_v and eu_v) else None
-            ws_w.cell(row=4,column=9).number_format = '+0.0%;-0.0%;"-"'
-            log("Excel", f"Weekly row 4: {monday.strftime('%Y-%m-%d')}")
+        existing = date_exists_in_weekly(ws_w, monday)
+        if existing:
+            w_row = existing
+            log("Excel", f"Updating weekly row {w_row}")
         else:
-            log("Excel", f"Weekly row for {monday.strftime('%Y-%m-%d')} already exists, skipping")
+            ws_w.insert_rows(4)
+            w_row = 4
+            log("Excel", f"Inserting weekly row {w_row}")
+        
+        ws_w.cell(row=w_row,column=1).value = monday
+        ws_w.cell(row=w_row,column=1).number_format = 'YYYY-MM-DD'
+        ws_w.cell(row=w_row,column=1).font = Font(name="Aptos",size=10,bold=True,color="1F2937")
+        for k,col in {"LT":2,"LV":3,"EE":4,"DK":5,"SE":6,"FI":7,"EU_AVG":8}.items():
+            val = eu_bulletin.get(k)
+            if val is not None:
+                c = ws_w.cell(row=w_row,column=col)
+                c.value = val; c.number_format = '0.000'
+                c.font = Font(name="Aptos",size=10,color="1D4ED8")
+        lt_v = eu_bulletin.get("LT"); eu_v = eu_bulletin.get("EU_AVG")
+        ws_w.cell(row=w_row,column=9).value = round((lt_v-eu_v)/eu_v,4) if (lt_v and eu_v) else None
+        ws_w.cell(row=w_row,column=9).number_format = '+0.0%;-0.0%;"-"'
 
     wb.save(str(EXCEL_PATH))
     log("Excel", f"Saved: {EXCEL_PATH}")
@@ -360,7 +374,7 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 # MAIN
 # ═══════════════════════════════════════
 def main():
-    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v4 — {TODAY_STR}\n{'='*60}\n")
+    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v5 — {TODAY_STR}\n{'='*60}\n")
     R = {}
     print("── FX Rates ──"); R["fx"] = fetch_fx()
     if WDAY < 5:
@@ -377,9 +391,7 @@ def main():
     ok = sum(1 for v in R.values() if v is not None)
     print(f"RESULTS: {ok}/{len(R)}")
     for k,v in R.items(): print(f"  {'✅' if v else '❌'} {k}: {v if v else 'FAILED'}")
-    print(f"{'─'*60}\n")
-    
-    print("── Updating Excel ──")
+    print(f"{'─'*60}\n── Updating Excel ──")
     success = update_excel(**R)
     Path(EXCEL_PATH.parent / "latest_results.json").write_text(
         json.dumps({"date":TODAY_STR,"results":{k:bool(v) for k,v in R.items()},"data":{k:v for k,v in R.items() if v}}, indent=2, default=str))
