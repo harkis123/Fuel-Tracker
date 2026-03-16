@@ -4,9 +4,9 @@
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
-    "elvis_de": true,
-    "bsh_se": true,
-    "eu_bulletin": true
+    "elvis_de": false,
+    "bsh_se": false,
+    "eu_bulletin": false
   },
   "data": {
     "fx": {
@@ -18,21 +18,6 @@
     },
     "orlen_lt": {
       "price_eur_l": 1.818
-    },
-    "elvis_de": {
-      "price_eur_l": 2.163
-    },
-    "bsh_se": {
-      "price_sek_l": 21.84
-    },
-    "eu_bulletin": {
-      "LT": 1.901,
-      "LV": 1.793,
-      "EE": 1.688,
-      "DK": 2.115,
-      "SE": 1.783,
-      "FI": 2.042,
-      "EU_AVG": 1.748
     }
   }
 }
