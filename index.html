@@ -57,6 +57,7 @@ function toggleEdit(){if(EM){cancelEdit();return;}document.getElementById('pm').
 function ck(){const pw=document.getElementById('pi').value,tk=document.getElementById('ti').value.trim();if(pw!=='sltpara'){document.getElementById('pe').textContent='Wrong password';document.getElementById('pe').classList.remove('hidden');return;}if(tk)sessionStorage.setItem('gh_token',tk);EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}
 function cancelEdit(){EM=false;document.getElementById('eBtn').className='rbtn';document.getElementById('eBtn').textContent='🔒 Edit';document.getElementById('eBar').classList.add('hidden');render();}
 function onEdit(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=D.find(x=>x.date===dt);if(r){r[fld]=v;if(r.plnM3&&r.plnEur)r.plEur=r.plnM3/r.plnEur/1000;if(r.plEur!=null&&r.ltEur!=null){r.delta=r.plEur-r.ltEur;r.deltaPct=r.delta/r.ltEur;}if(r.seSek&&r.sekEur)r.seEur=r.seSek/r.sekEur;render();}}}
+function onEditW(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=W.find(x=>x.date===dt);if(r){r[fld]=v;render();}}}
 function saveEdits(){downloadExcel();cancelEdit();}
 
 async function init(){
@@ -162,11 +163,15 @@ D.forEach(r=>{
   const dlt=ltD!=null&&plD!=null?plD-ltD:null;
   const dltP=dlt!=null&&ltD?dlt/ltD:null;
   const dc=dlt!=null?(dlt<0?'ng':dlt>0?'ps':''):'';
+  const ei=(field,val)=>EM?`<input class="ei" type="number" step="0.001" value="${val!=null?val:''}" onchange="onEdit('${r.date}','${field}',this)">`:f(field==='deltaPct'&&val!=null?(val*100):val);
   dt+=`<tr><td class="bd">${r.date}</td><td>${r.day}</td>`;
-  dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.ltEur!=null?r.ltEur:''}" onchange="onEdit('${r.date}','ltEur',this)">`:f(ltD)}</td>`;
-  dt+=`<td class="nm">${f(plD)}</td><td class="nm ${dc}">${dlt!=null?(dlt>0?'+':'')+dlt.toFixed(3):'—'}</td><td class="nm ${dc}">${dltP!=null?(dltP>0?'+':'')+(dltP*100).toFixed(1)+'%':'—'}</td>`;
-  dt+=`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.deEur!=null?r.deEur:''}" onchange="onEdit('${r.date}','deEur',this)">`:f(deD)}</td>`;
-  dt+=`<td class="nm">${f(seD)}</td><td>${r.notes}</td></tr>`;});
+  dt+=`<td class="nm">${EM?ei('ltEur',r.ltEur):f(ltD)}</td>`;
+  dt+=`<td class="nm">${EM?ei('plEur',r.plEur):f(plD)}</td>`;
+  dt+=`<td class="nm ${dc}">${dlt!=null?(dlt>0?'+':'')+dlt.toFixed(3):'—'}</td>`;
+  dt+=`<td class="nm ${dc}">${dltP!=null?(dltP>0?'+':'')+(dltP*100).toFixed(1)+'%':'—'}</td>`;
+  dt+=`<td class="nm">${EM?ei('deEur',r.deEur):f(deD)}</td>`;
+  dt+=`<td class="nm">${EM?ei('seEur',r.seEur):f(seD)}</td>`;
+  dt+=`<td>${r.notes}</td></tr>`;});
 dt+='</tbody></table>';document.getElementById('dt').innerHTML=dt;
 
 const sw=SHOW_VAT.weekly;
@@ -181,7 +186,7 @@ W.forEach(r=>{
   const lc=d!=null?(d<0?'ng':d>0?'ps':''):'';
   const euCell=sw?f(euW):`<span style="color:var(--t5);font-size:9px">—</span>`;
   const ltEuCell=sw?(d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'):`<span style="color:var(--t5);font-size:9px" title="Neprilyginama be PVM">N/A</span>`;
-  wt+=`<tr><td class="bd">${r.date}</td>${vals.map(v=>`<td class="nm">${f(v)}</td>`).join('')}<td class="nm">${euCell}</td><td class="nm ${sw?lc:''}">${ltEuCell}</td></tr>`;});
+  wt+=`<tr><td class="bd">${r.date}</td>${cc.map((c,i)=>`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r[c]!=null?r[c]:''}" onchange="onEditW('${r.date}','${c}',this)">`:f(vals[i])}</td>`).join('')}<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.EU!=null?r.EU:''}" onchange="onEditW('${r.date}','EU',this)">`:euCell}</td><td class="nm ${sw?lc:''}">${ltEuCell}</td></tr>`;});
 wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 
 document.getElementById('sg').innerHTML=[
