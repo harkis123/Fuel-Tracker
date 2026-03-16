@@ -30,14 +30,14 @@
 <div class="app">
 <header class="hdr"><div class="brand"><div class="logo">⛽</div><div><div class="brand-title">Fuel Price Tracker</div><div class="brand-sub" id="st">Loading...</div></div></div><nav class="nav"><button class="nav-b on" data-t="dash">◉ Dashboard</button><button class="nav-b" data-t="daily">◫ Daily Data</button><button class="nav-b" data-t="weekly">◧ EU Bulletin</button><button class="nav-b" data-t="src">◎ Sources</button></nav><div class="hdr-right"><div class="dot loading" id="dot"></div><button class="rbtn" onclick="init()">↻ Refresh</button><button class="rbtn" onclick="downloadExcel()" style="background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none">📥 Excel</button><button class="rbtn" id="eBtn" onclick="toggleEdit()">🔒 Edit</button></div></header>
 <div class="ub" id="ub">⏳ Loading...</div>
-<div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values in Daily Data to edit <button class="sb" onclick="saveEdits()">💾 Save Excel</button> <button class="cb" onclick="cancelEdit()">Cancel</button></div>
+<div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values in Daily Data to edit <button class="sb" onclick="downloadExcel()">📥 Download</button> <button class="sb" onclick="saveToGitHub()" style="background:linear-gradient(135deg,var(--blue),#2563eb)">☁️ Save to GitHub</button> <button class="cb" onclick="cancelEdit()">Cancel</button> <span style="font-size:10px;margin-left:8px" id="saveStatus"></span></div>
 <main class="main">
 <section id="tab-dash"><div style="display:flex;justify-content:flex-end;margin-bottom:12px" id="vat-dash"></div><div class="gk" id="kpi"></div><div class="g2"><div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div><div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div></div></section>
 <section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span><div id="vat-daily"></div></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
 <section id="tab-weekly" class="hidden"><div class="stt">EU Weekly Oil Bulletin <span class="c" id="wc"></span><div id="vat-weekly"></div></div><div class="pnl"><div class="tw" id="wt"></div></div></section>
 <section id="tab-src" class="hidden"><div class="stt">Data Sources</div><div class="sg" id="sg"></div></section>
 </main></div>
-<div class="mo hidden" id="pm"><div class="md"><h3>🔐 Edit Password</h3><div class="me hidden" id="pe">Wrong password</div><input type="password" id="pi" placeholder="Password..." onkeydown="if(event.key==='Enter')ck()"><button class="mb" onclick="ck()">Unlock</button></div></div>
+<div class="mo hidden" id="pm"><div class="md"><h3>🔐 Edit Mode</h3><div class="me hidden" id="pe">Wrong password</div><input type="password" id="pi" placeholder="Edit password..." onkeydown="if(event.key==='Enter')document.getElementById('ti').focus()"><input type="password" id="ti" placeholder="GitHub token (ghp_...)" onkeydown="if(event.key==='Enter')ck()"><div style="font-size:9px;color:var(--t5);margin:-6px 0 10px">Token needed to save to GitHub. Create: GitHub → Settings → Developer settings → Tokens (classic)</div><button class="mb" onclick="ck()">Unlock</button></div></div>
 <script>
 const REPO="harkis123/Fuel-Tracker",FILE="fuel_tracker.xlsx";
 const URL_=()=>`https://raw.githubusercontent.com/${REPO}/main/${FILE}?t=${Date.now()}`;
@@ -53,8 +53,8 @@ function toggleVat(tab){SHOW_VAT[tab]=!SHOW_VAT[tab];render();}
 
 document.querySelectorAll('.nav-b').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav-b').forEach(x=>x.classList.remove('on'));b.classList.add('on');['dash','daily','weekly','src'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hidden',t!==b.dataset.t));}));
 
-function toggleEdit(){if(EM){cancelEdit();return;}document.getElementById('pm').classList.remove('hidden');document.getElementById('pi').value='';document.getElementById('pe').classList.add('hidden');setTimeout(()=>document.getElementById('pi').focus(),100);}
-function ck(){if(document.getElementById('pi').value==='sltpara'){EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}else{document.getElementById('pe').classList.remove('hidden');}}
+function toggleEdit(){if(EM){cancelEdit();return;}document.getElementById('pm').classList.remove('hidden');document.getElementById('pi').value='';document.getElementById('ti').value=sessionStorage.getItem('gh_token')||'';document.getElementById('pe').classList.add('hidden');setTimeout(()=>document.getElementById('pi').focus(),100);}
+function ck(){const pw=document.getElementById('pi').value,tk=document.getElementById('ti').value.trim();if(pw!=='sltpara'){document.getElementById('pe').textContent='Wrong password';document.getElementById('pe').classList.remove('hidden');return;}if(tk)sessionStorage.setItem('gh_token',tk);EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}
 function cancelEdit(){EM=false;document.getElementById('eBtn').className='rbtn';document.getElementById('eBtn').textContent='🔒 Edit';document.getElementById('eBar').classList.add('hidden');render();}
 function onEdit(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=D.find(x=>x.date===dt);if(r){r[fld]=v;if(r.plnM3&&r.plnEur)r.plEur=r.plnM3/r.plnEur/1000;if(r.plEur!=null&&r.ltEur!=null){r.delta=r.plEur-r.ltEur;r.deltaPct=r.delta/r.ltEur;}if(r.seSek&&r.sekEur)r.seEur=r.seSek/r.sekEur;render();}}}
 function saveEdits(){downloadExcel();cancelEdit();}
@@ -245,6 +245,37 @@ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d2),"EU Bulletin");
 const d3=[["Data","Orlen LT","Orlen PL €","Δ","Elvis DE","BSH SE €","PLN/EUR","SEK/EUR"]];D.forEach(r=>d3.push([r.date,r.ltEur,r.plEur,r.delta,r.deEur,r.seEur,r.plnEur,r.sekEur]));
 XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d3),"Palyginimas");
 XLSX.writeFile(wb,`fuel_${new Date().toISOString().split('T')[0]}.xlsx`);}
+
+const GH_API=`https://api.github.com/repos/${REPO}/contents/${FILE}`;
+async function saveToGitHub(){
+  const tk=sessionStorage.getItem('gh_token');
+  if(!tk){alert('No GitHub token. Re-enter Edit mode with token.');return;}
+  const ss=document.getElementById('saveStatus');
+  ss.textContent='⏳ Saving...';ss.style.color='var(--amber)';
+  try{
+    // 1. Get SHA of current file
+    const meta=await fetch(GH_API,{headers:{'Authorization':`token ${tk}`,'Accept':'application/vnd.github.v3+json'}});
+    if(!meta.ok){const e=await meta.json();throw new Error(e.message||`HTTP ${meta.status}`);}
+    const sha=(await meta.json()).sha;
+    // 2. Build Excel from current D and W data
+    const wb=XLSX.utils.book_new();
+    const dH=[["Date","Day","PLN/m³","PLN/EUR","EUR/l","EUR/l","Δ EUR/l","Δ %","EUR/l","SEK/l","SEK/EUR","EUR/l","Notes","Freq"]];
+    const dS=["","","ORLEN PL — EKODIESEL","","","ORLEN LT","Δ PL vs LT","","ELVIS DE","BSH / ST1 SE","","","",""];
+    const dRows=[["⛽  Daily Fuel Prices"],["🔵 Blue = input  ·  Row 5 = newest"],dS,dH[0]];
+    D.forEach(r=>dRows.push([r.date,r.day,r.plnM3,r.plnEur,r.plEur,r.ltEur,r.delta,r.deltaPct,r.deEur,r.seSek,r.sekEur,r.seEur,r.notes,'']));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dRows),"Daily Tracker");
+    const wRows=[["📊  EU Weekly Oil Bulletin — Diesel Prices with Taxes"],["Source: energy.ec.europa.eu"],["Week Start","🇱🇹 LT","🇱🇻 LV","🇪🇪 EE","🇩🇰 DK","🇸🇪 SE","🇫🇮 FI","🇪🇺 EU Avg","LT vs EU Δ","Notes"]];
+    W.forEach(r=>{const d=(r.LT&&r.EU)?((r.LT-r.EU)/r.EU):null;wRows.push([r.date,r.LT,r.LV,r.EE,r.DK,r.SE,r.FI,r.EU,d,'']);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(wRows),"Weekly Oil Bulletin");
+    // 3. Push to GitHub
+    const content=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+    const push=await fetch(GH_API,{method:'PUT',headers:{'Authorization':`token ${tk}`,'Content-Type':'application/json'},
+      body:JSON.stringify({message:`📊 Manual edit ${new Date().toISOString().split('T')[0]}`,content,sha,branch:'main'})});
+    if(!push.ok){const e=await push.json();throw new Error(e.message||`HTTP ${push.status}`);}
+    ss.textContent='✅ Saved!';ss.style.color='var(--green)';
+    setTimeout(()=>{ss.textContent='';init();},2000);
+  }catch(e){ss.textContent=`❌ ${e.message}`;ss.style.color='var(--red)';console.error(e);}
+}
 
 init();setInterval(init,5*60*1000);
 </script>
