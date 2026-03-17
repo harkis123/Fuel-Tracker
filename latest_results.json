@@ -1,5 +1,5 @@
 {
-  "date": "2026-03-16",
+  "date": "2026-03-17",
   "results": {
     "fx": true,
     "orlen_pl": true,
@@ -10,14 +10,14 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2675,
-      "SEK_EUR": 10.7545
+      "PLN_EUR": 4.2683,
+      "SEK_EUR": 10.769
     },
     "orlen_pl": {
-      "price_pln_m3": 6495.0
+      "price_pln_m3": 6577.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.818
+      "price_eur_l": 1.8374
     }
   }
 }
