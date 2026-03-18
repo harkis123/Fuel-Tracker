@@ -30,7 +30,7 @@
 <div class="app">
 <header class="hdr"><div class="brand"><div class="logo">⛽</div><div><div class="brand-title">Fuel Price Tracker</div><div class="brand-sub" id="st">Loading...</div></div></div><nav class="nav"><button class="nav-b on" data-t="dash">◉ Dashboard</button><button class="nav-b" data-t="daily">◫ Daily Data</button><button class="nav-b" data-t="weekly">◧ EU Bulletin</button><button class="nav-b" data-t="src">◎ Sources</button></nav><div class="hdr-right"><div class="dot loading" id="dot"></div><button class="rbtn" onclick="init()">↻ Refresh</button><button class="rbtn" onclick="downloadExcel()" style="background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none">📥 Excel</button><button class="rbtn" id="eBtn" onclick="toggleEdit()">🔒 Edit</button></div></header>
 <div class="ub" id="ub">⏳ Loading...</div>
-<div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values in Daily Data to edit <button class="sb" onclick="downloadExcel()">📥 Download</button> <button class="sb" onclick="saveToGitHub()" style="background:linear-gradient(135deg,var(--blue),#2563eb)">☁️ Save to GitHub</button> <button class="cb" onclick="cancelEdit()">Cancel</button> <span style="font-size:10px;margin-left:8px" id="saveStatus"></span></div>
+<div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values to edit <button class="sb" onclick="downloadExcel()">📥 Download</button> <button class="sb" onclick="saveToGitHub()" style="background:linear-gradient(135deg,var(--blue),#2563eb)">☁️ Save to GitHub</button> <button class="sb" onclick="runScraper()" style="background:linear-gradient(135deg,var(--purple),#7c3aed)">🚀 Run Scraper</button> <button class="cb" onclick="cancelEdit()">Cancel</button> <span style="font-size:10px;margin-left:8px" id="saveStatus"></span></div>
 <main class="main">
 <section id="tab-dash"><div style="display:flex;justify-content:flex-end;margin-bottom:12px" id="vat-dash"></div><div class="gk" id="kpi"></div><div class="g2"><div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div><div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div></div></section>
 <section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span><div id="vat-daily"></div></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
@@ -116,11 +116,22 @@ const ks=[{l:'ORLEN LT',v:f(ltV),tr:pc(ltV,ltVP),s:`EUR/l ${vatLbl}`,c:'var(--cy
 // MECFS calculation: base 4694 PLN/1000L, step 78 PLN = +0.5%
 const MECFS_BASE=4694,MECFS_STEP=78,MECFS_MAX_PCT=15;
 function calcMecfs(plnM3){if(!plnM3)return null;const steps=Math.floor((plnM3-MECFS_BASE)/MECFS_STEP);return Math.max(0,Math.min(steps*0.5,MECFS_MAX_PCT));}
-// Weekly avg: last 7 days of data ending on each day (rolling 7-day window)
-function weekAvgPlnM3(fromIdx){const slice=D.slice(fromIdx,fromIdx+7).map(r=>r.plnM3).filter(v=>v!=null);return slice.length?slice.reduce((a,b)=>a+b,0)/slice.length:null;}
-const weekAvg=weekAvgPlnM3(0);
+// Weekly avg: 7 CALENDAR days ending on refDate (inclusive)
+function weekAvgPlnM3ByDate(refDate){
+  const end=new Date(refDate+'T23:59:59');
+  const start=new Date(end);start.setDate(start.getDate()-6);
+  const startStr=start.toISOString().split('T')[0];
+  const endStr=refDate;
+  const vals=D.filter(r=>r.date>=startStr&&r.date<=endStr&&r.plnM3!=null).map(r=>r.plnM3);
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+}
+// For backward compat: fromIdx-based (uses date of D[fromIdx] as reference)
+function weekAvgPlnM3(fromIdx){const r=D[fromIdx];return r?weekAvgPlnM3ByDate(r.date):null;}
+const weekAvg=D[0]?weekAvgPlnM3ByDate(D[0].date):null;
 const mecfs=calcMecfs(weekAvg);
-const prevWeekAvg=weekAvgPlnM3(7);
+// Previous week: 7 calendar days ending 7 days before latest
+const prevRefDate=D[0]?(()=>{const d=new Date(D[0].date);d.setDate(d.getDate()-7);return d.toISOString().split('T')[0];})():null;
+const prevWeekAvg=prevRefDate?weekAvgPlnM3ByDate(prevRefDate):null;
 const mecfsColor=mecfs==null?'var(--t4)':mecfs===0?'var(--green)':mecfs<=3?'var(--amber)':mecfs<=7?'var(--orange)':'var(--red)';
 document.getElementById('kpi').innerHTML=ks.map(k=>{const tc=k.tr>.05?'up':k.tr<-.05?'dn':'';const ti=k.tr>.05?'▲':k.tr<-.05?'▼':'';const tv=k.tr!=null?`<span class="kpi-tr ${tc}">${ti} ${Math.abs(k.tr).toFixed(1)}%</span>`:'';return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;}).join('')+
 (()=>{
@@ -130,9 +141,10 @@ const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>({v:r.v,label:`${r.date}: 
 const prevMecfs=calcMecfs(prevWeekAvg);
 const mDelta=mecfs!=null&&prevMecfs!=null?mecfs-prevMecfs:null;
 const mTrHtml=mDelta!=null&&mDelta!==0?`<span class="kpi-tr ${mDelta>0?'up':'dn'}">${mDelta>0?'▲':'▼'} ${Math.abs(mDelta).toFixed(1)}pp</span>`:'';
-const weekEnd=D[0]?.date||'';const weekStart=D[Math.min(6,D.length-1)]?.date||'';
+const weekEnd=D[0]?.date||'';
+const weekStartDate=D[0]?(()=>{const d=new Date(D[0].date);d.setDate(d.getDate()-6);return d.toISOString().split('T')[0];})():'';
 const weekLabel=weekAvg?`7d avg: ${weekAvg.toFixed(0)} PLN/1000L`:'';
-const weekRange=weekStart&&weekEnd&&weekStart!==weekEnd?`${weekStart} – ${weekEnd}`:'';
+const weekRange=weekStartDate&&weekEnd?`${weekStartDate} – ${weekEnd}`:'';
 return`<div class="kpi" style="grid-column:1/-1;animation-delay:.3s"><div class="kpi-ac" style="background:${mecfsColor}"></div><div class="kpi-ico">⚡</div><div class="kpi-lbl">Middle East Crisis Fuel Surcharge (MECFS) — savaitės vidurkis</div><div style="display:flex;align-items:center;justify-content:space-between;padding-left:12px;padding-right:8px"><div style="display:flex;align-items:baseline;gap:10px"><div class="kpi-val" style="color:${mecfsColor}">${mecfs!=null?mecfs.toFixed(1)+'%':'—'}</div><div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${weekRange}</span></div>${mTrHtml}</div><div style="opacity:.85">${histSpk}</div></div><div style="padding:8px 12px 4px"><div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t5);margin-bottom:4px"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div><div style="background:var(--bg4);border-radius:4px;height:8px;overflow:hidden;border:1px solid var(--brd2)"><div style="height:100%;width:${mecfs!=null?(mecfs/MECFS_MAX_PCT)*100:0}%;background:linear-gradient(90deg,var(--green),var(--amber),var(--orange),var(--red));border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1)"></div></div><div style="font-size:9px;color:var(--t5);margin-top:5px">Bazė: ${MECFS_BASE} PLN/1000L · žingsnis: ${MECFS_STEP} PLN = +0.5% · max: ${MECFS_MAX_PCT}% · ${mecfsHist.length} savaičių istorija</div></div></div>`;
 })();
 
@@ -279,6 +291,33 @@ async function saveToGitHub(){
     if(!push.ok){const e=await push.json();throw new Error(e.message||`HTTP ${push.status}`);}
     ss.textContent='✅ Saved!';ss.style.color='var(--green)';
     setTimeout(()=>{ss.textContent='';init();},2000);
+  }catch(e){ss.textContent=`❌ ${e.message}`;ss.style.color='var(--red)';console.error(e);}
+}
+
+async function runScraper(){
+  const tk=sessionStorage.getItem('gh_token');
+  if(!tk){alert('No GitHub token. Re-enter Edit mode with token.');return;}
+  const ss=document.getElementById('saveStatus');
+  ss.textContent='🚀 Triggering scraper...';ss.style.color='var(--amber)';
+  try{
+    // 1. Get workflow ID
+    const wfRes=await fetch(`https://api.github.com/repos/${REPO}/actions/workflows`,{
+      headers:{'Authorization':`token ${tk}`,'Accept':'application/vnd.github.v3+json'}});
+    if(!wfRes.ok)throw new Error(`Workflows API: ${wfRes.status}`);
+    const wfs=await wfRes.json();
+    const wf=wfs.workflows.find(w=>w.name==='Fuel Price Tracker')||wfs.workflows[0];
+    if(!wf)throw new Error('Workflow not found');
+    // 2. Dispatch
+    const dispatch=await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${wf.id}/dispatches`,{
+      method:'POST',
+      headers:{'Authorization':`token ${tk}`,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'},
+      body:JSON.stringify({ref:'main'})
+    });
+    if(!dispatch.ok){const e=await dispatch.json();throw new Error(e.message||`HTTP ${dispatch.status}`);}
+    ss.textContent='✅ Scraper triggered! Data updates in ~1 min.';ss.style.color='var(--green)';
+    // Auto-refresh after 90 seconds
+    setTimeout(()=>{ss.textContent='↻ Refreshing...';ss.style.color='var(--amber)';init();},90000);
+    setTimeout(()=>{ss.textContent='';},120000);
   }catch(e){ss.textContent=`❌ ${e.message}`;ss.style.color='var(--red)';console.error(e);}
 }
 
