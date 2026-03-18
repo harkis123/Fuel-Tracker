@@ -1,23 +1,38 @@
 {
-  "date": "2026-03-17",
+  "date": "2026-03-18",
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
-    "elvis_de": false,
-    "bsh_se": false,
-    "eu_bulletin": false
+    "elvis_de": true,
+    "bsh_se": true,
+    "eu_bulletin": true
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2683,
-      "SEK_EUR": 10.769
+      "PLN_EUR": 4.2593,
+      "SEK_EUR": 10.7055
     },
     "orlen_pl": {
-      "price_pln_m3": 6577.0
+      "price_pln_m3": 6565.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.8374
+      "price_eur_l": 1.864
+    },
+    "elvis_de": {
+      "price_eur_l": 2.163
+    },
+    "bsh_se": {
+      "price_sek_l": 22.44
+    },
+    "eu_bulletin": {
+      "LT": 1.901,
+      "LV": 1.793,
+      "EE": 1.688,
+      "DK": 2.115,
+      "SE": 1.783,
+      "FI": 2.042,
+      "EU_AVG": 1.748
     }
   }
 }
