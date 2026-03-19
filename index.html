@@ -57,7 +57,18 @@ function toggleEdit(){if(EM){cancelEdit();return;}document.getElementById('pm').
 function ck(){const pw=document.getElementById('pi').value,tk=document.getElementById('ti').value.trim();if(pw!=='sltpara'){document.getElementById('pe').textContent='Wrong password';document.getElementById('pe').classList.remove('hidden');return;}if(tk)sessionStorage.setItem('gh_token',tk);EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}
 function cancelEdit(){EM=false;document.getElementById('eBtn').className='rbtn';document.getElementById('eBtn').textContent='🔒 Edit';document.getElementById('eBar').classList.add('hidden');render();}
 function onEdit(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=D.find(x=>x.date===dt);if(r){r[fld]=v;if(r.plnM3&&r.plnEur)r.plEur=r.plnM3/r.plnEur/1000;if(r.plEur!=null&&r.ltEur!=null){r.delta=r.plEur-r.ltEur;r.deltaPct=r.delta/r.ltEur;}if(r.seSek&&r.sekEur)r.seEur=r.seSek/r.sekEur;render();}}}
-function onEditW(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=W.find(x=>x.date===dt);if(r){r[fld]=v;render();}}}
+function onEditDate(oldDt,el){const r=D.find(x=>x.date===oldDt);if(r){r.date=el.value;const d=new Date(el.value);r.day=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];render();}}
+function onEditW(dt,fld,el){
+  const r=W.find(x=>x.date===dt);
+  if(!r)return;
+  if(fld==='_date'){
+    r.date=el.value;
+    render();
+  }else{
+    const v=parseFloat(el.value);
+    if(!isNaN(v)){r[fld]=v;render();}
+  }
+}
 function saveEdits(){downloadExcel();cancelEdit();}
 
 async function init(){
@@ -176,7 +187,7 @@ D.forEach(r=>{
   const dltP=dlt!=null&&ltD?dlt/ltD:null;
   const dc=dlt!=null?(dlt<0?'ng':dlt>0?'ps':''):'';
   const ei=(field,val)=>EM?`<input class="ei" type="number" step="0.001" value="${val!=null?val:''}" onchange="onEdit('${r.date}','${field}',this)">`:f(field==='deltaPct'&&val!=null?(val*100):val);
-  dt+=`<tr><td class="bd">${r.date}</td><td>${r.day}</td>`;
+  dt+=`<tr><td class="bd">${EM?`<input class="ei" type="date" value="${r.date}" style="width:110px" onchange="onEditDate('${r.date}',this)">`:r.date}</td><td>${r.day}</td>`;
   dt+=`<td class="nm">${EM?ei('ltEur',r.ltEur):f(ltD)}</td>`;
   dt+=`<td class="nm">${EM?ei('plEur',r.plEur):f(plD)}</td>`;
   dt+=`<td class="nm ${dc}">${dlt!=null?(dlt>0?'+':'')+dlt.toFixed(3):'—'}</td>`;
@@ -198,13 +209,13 @@ W.forEach(r=>{
   const lc=d!=null?(d<0?'ng':d>0?'ps':''):'';
   const euCell=sw?f(euW):`<span style="color:var(--t5);font-size:9px">—</span>`;
   const ltEuCell=sw?(d!=null?(d>0?'+':'')+d.toFixed(1)+'%':'—'):`<span style="color:var(--t5);font-size:9px" title="Neprilyginama be PVM">N/A</span>`;
-  wt+=`<tr><td class="bd">${r.date}</td>${cc.map((c,i)=>`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r[c]!=null?r[c]:''}" onchange="onEditW('${r.date}','${c}',this)">`:f(vals[i])}</td>`).join('')}<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.EU!=null?r.EU:''}" onchange="onEditW('${r.date}','EU',this)">`:euCell}</td><td class="nm ${sw?lc:''}">${ltEuCell}</td></tr>`;});
+  wt+=`<tr><td class="bd">${EM?`<input class="ei" type="date" value="${r.date}" style="width:110px" onchange="onEditW('${r.date}','_date',this)">`:r.date}</td>${cc.map((c,i)=>`<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r[c]!=null?r[c]:''}" onchange="onEditW('${r.date}','${c}',this)">`:f(vals[i])}</td>`).join('')}<td class="nm">${EM?`<input class="ei" type="number" step="0.001" value="${r.EU!=null?r.EU:''}" onchange="onEditW('${r.date}','EU',this)">`:euCell}</td><td class="nm ${sw?lc:''}">${ltEuCell}</td></tr>`;});
 wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 
 document.getElementById('sg').innerHTML=[
-{n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'fuel-prices.eu',c:'#f59e0b',t:'Diesel LT/LV/EE/DK/SE/FI ✅ Auto'},{n:'Elvis DE — Diesel',u:'fuel-prices.eu/Germany',c:'#a855f7',t:'EC Oil Bulletin Diesel ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR ✅ Auto'}
+{n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'Didmeninė kaina PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF protokolai',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'energy.ec.europa.eu (XLSX)',c:'#f59e0b',t:'Diesel kainos LT/LV/EE/DK/SE/FI — tiesiai iš EC ✅ Auto'},{n:'Elvis DE — Diesel',u:'energy.ec.europa.eu + fuel-prices.eu',c:'#a855f7',t:'Vokietijos Diesel vidurkis iš EC Oil Bulletin ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se/foretag/listpris',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR kursai ✅ Auto'}
 ].map(s=>`<div class="sc" style="border-left-color:${s.c}"><div class="sc-n">${s.n}</div><div class="sc-u">${s.u}</div><div class="sc-nt">${s.t}</div></div>`).join('')+
-`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password → modify values → 💾 Save downloads Excel.</p></div>`;
+`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p></div>`;
 setTimeout(attachSpkEvents,0);}
 
 // Shared tooltip element
