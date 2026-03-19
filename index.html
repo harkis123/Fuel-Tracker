@@ -43,7 +43,7 @@ const REPO="harkis123/Fuel-Tracker",FILE="fuel_tracker.xlsx";
 const URL_=()=>`https://raw.githubusercontent.com/${REPO}/main/${FILE}?t=${Date.now()}`;
 let D=[],W=[],EM=false;
 // VAT rates per country (as multiplier divisor, e.g. 1.21 for 21%)
-const VAT={LT:1.21,PL:1.23,DE:1.19,SE:1.25,LV:1.21,EE:1.22,DK:1.25,FI:1.255,EU:1.0};
+const VAT={LT:1.21,PL:1.23,DE:1.19,SE:1.25,LV:1.21,EE:1.24,DK:1.25,FI:1.255,EU:1.0};
 // Per-tab VAT toggle state (true = su PVM, false = be PVM)
 const SHOW_VAT={dash:true,daily:true,weekly:true};
 function exVat(v,rate){return v!=null?v/rate:null;}
@@ -200,7 +200,7 @@ dt+='</tbody></table>';document.getElementById('dt').innerHTML=dt;
 const sw=SHOW_VAT.weekly;
 const wVatLbl=sw?'su PVM':'be PVM';
 document.getElementById('wc').textContent=`(${W.length})`;
-let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}<br><span style="font-size:8px;color:var(--t5)">${((VAT[c]||1)-1)*100|0}% PVM</span></th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
+let wt=`<table><thead><tr><th>Week</th>${cc.map(c=>`<th class="nm">${c}<br><span style="font-size:8px;color:var(--t5)">${Math.round(((VAT[c]||1)-1)*100*10)/10}% PVM</span></th>`).join('')}<th class="nm">EU Avg</th><th class="nm">LT vs EU</th></tr></thead><tbody>`;
 if(!W.length)wt+=`<tr><td colspan="${cc.length+3}" class="emp">No data</td></tr>`;
 W.forEach(r=>{
   const vals=cc.map(c=>{const raw=r[c];return raw?applyVat(raw,VAT[c]||1,sw):null;});
