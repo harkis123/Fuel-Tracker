@@ -185,7 +185,7 @@ def fetch_bsh_se():
 # 6. EU BULLETIN — direct EC XLSX download
 # ═══════════════════════════════════════
 def fetch_eu_bulletin():
-    """Download EC Weekly Oil Bulletin XLSX and extract diesel prices + actual date"""
+    """Download EC Weekly Oil Bulletin XLSX — take DIESEL column (Gas oil automobile), not Euro-super 95"""
     try:
         url = "https://energy.ec.europa.eu/document/download/264c2d0f-f161-4ea3-a777-78faae59bea0_en?filename=Weekly%20Oil%20Bulletin%20Weekly%20prices%20with%20Taxes%20-%202024-02-19.xlsx"
         log("EU Bulletin", "Downloading EC XLSX...")
@@ -202,72 +202,92 @@ def fetch_eu_bulletin():
                     "Denmark": "DK", "Sweden": "SE", "Finland": "FI"}
         eu_avg = None
         de_diesel = None
-        ec_date = None  # actual date from EC file
+        ec_date = None
 
-        for sname in wb.sheetnames:
-            ws = wb[sname]
-            log("EU Bulletin", f"Sheet: {sname} ({ws.max_row}r x {ws.max_column}c)")
-            for row in range(1, ws.max_row + 1):
-                # Try to find date in any cell of first few rows
-                if row <= 5 and ec_date is None:
-                    for col in range(1, min(10, ws.max_column + 1)):
-                        val = ws.cell(row=row, column=col).value
-                        if val is None: continue
-                        if hasattr(val, 'strftime'):
-                            ec_date = val.strftime('%Y-%m-%d')
-                            log("EU Bulletin", f"EC date found: {ec_date}")
-                        elif isinstance(val, str):
-                            # Try to find date pattern in text like "Prices at 17/03/2026" or "17.03.2026"
-                            dm = re.search(r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', str(val))
-                            if dm:
-                                d,m,y = dm.group(1),dm.group(2),dm.group(3)
-                                ec_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
-                                log("EU Bulletin", f"EC date from text: {ec_date}")
+        ws = wb[wb.sheetnames[0]]  # first sheet
+        log("EU Bulletin", f"Sheet: {ws.title} ({ws.max_row}r x {ws.max_column}c)")
 
-                cell0 = str(ws.cell(row=row, column=1).value or "").strip()
-                if not cell0: continue
+        # Step 1: Find the DIESEL column by scanning headers
+        # EC structure: col A=country, col B=Euro-super 95, col C=Gas oil (DIESEL), col D=Heating, ...
+        # But let's find it dynamically in case it shifts
+        diesel_col = 3  # default: column C
+        for row in range(1, 6):
+            for col in range(1, min(10, ws.max_column + 1)):
+                val = str(ws.cell(row=row, column=col).value or "").lower()
+                if "gas oil" in val or "diesel" in val or "gasoil" in val:
+                    diesel_col = col
+                    log("EU Bulletin", f"Diesel column found: {col} (row {row}: '{val[:50]}')")
+                    break
+            if diesel_col != 3: break
 
-                for cname, cc in cc_names.items():
-                    if cname.lower() in cell0.lower():
-                        for col in range(2, min(15, ws.max_column + 1)):
-                            val = ws.cell(row=row, column=col).value
-                            if val is None: continue
-                            try:
-                                v = float(val)
-                                if 0.5 < v < 3.5: countries[cc] = round(v, 4); break
-                                elif 500 < v < 3500: countries[cc] = round(v / 1000, 4); break
-                            except: continue
+        log("EU Bulletin", f"Using diesel column: {diesel_col}")
 
-                if "germany" in cell0.lower():
-                    for col in range(2, min(15, ws.max_column + 1)):
-                        val = ws.cell(row=row, column=col).value
-                        if val is None: continue
+        # Step 2: Find date in first few rows
+        for row in range(1, 6):
+            for col in range(1, min(10, ws.max_column + 1)):
+                val = ws.cell(row=row, column=col).value
+                if val is None: continue
+                if hasattr(val, 'strftime'):
+                    ec_date = val.strftime('%Y-%m-%d')
+                    log("EU Bulletin", f"Date (datetime): {ec_date}")
+                elif isinstance(val, str):
+                    dm = re.search(r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', val)
+                    if dm:
+                        d, m, y = dm.group(1), dm.group(2), dm.group(3)
+                        ec_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                        log("EU Bulletin", f"Date (text): {ec_date}")
+
+        # Step 3: Read country prices from DIESEL column only
+        for row in range(1, ws.max_row + 1):
+            cell0 = str(ws.cell(row=row, column=1).value or "").strip()
+            if not cell0: continue
+
+            # Match our target countries
+            for cname, cc in cc_names.items():
+                if cname.lower() in cell0.lower():
+                    val = ws.cell(row=row, column=diesel_col).value
+                    if val is not None:
                         try:
                             v = float(val)
-                            if 0.5 < v < 3.5: de_diesel = round(v, 4); break
-                            elif 500 < v < 3500: de_diesel = round(v / 1000, 4); break
-                        except: continue
+                            if 0.5 < v < 3.5:
+                                countries[cc] = round(v, 4)
+                            elif 500 < v < 3500:
+                                countries[cc] = round(v / 1000, 4)
+                            log("EU Bulletin", f"  {cname}: {v} → {countries[cc]} EUR/l")
+                        except: pass
 
-                c0l = cell0.lower()
-                if ("eu" in c0l or "euro" in c0l) and ("average" in c0l or "weighted" in c0l or "avg" in c0l or "mean" in c0l):
-                    for col in range(2, min(15, ws.max_column + 1)):
-                        val = ws.cell(row=row, column=col).value
-                        if val is None: continue
-                        try:
-                            v = float(val)
-                            if 0.5 < v < 3.5: eu_avg = round(v, 4); break
-                            elif 500 < v < 3500: eu_avg = round(v / 1000, 4); break
-                        except: continue
+            # Germany
+            if "germany" in cell0.lower():
+                val = ws.cell(row=row, column=diesel_col).value
+                if val is not None:
+                    try:
+                        v = float(val)
+                        if 0.5 < v < 3.5: de_diesel = round(v, 4)
+                        elif 500 < v < 3500: de_diesel = round(v / 1000, 4)
+                        log("EU Bulletin", f"  Germany: {v} → {de_diesel} EUR/l")
+                    except: pass
+
+            # EU weighted average
+            c0l = cell0.lower()
+            if ("eu" in c0l or "ce/ec" in c0l or "eur27" in c0l) and ("average" in c0l or "weighted" in c0l or "moyenne" in c0l or "durchschnitt" in c0l):
+                val = ws.cell(row=row, column=diesel_col).value
+                if val is not None:
+                    try:
+                        v = float(val)
+                        if 0.5 < v < 3.5: eu_avg = round(v, 4)
+                        elif 500 < v < 3500: eu_avg = round(v / 1000, 4)
+                        log("EU Bulletin", f"  EU avg: {v} → {eu_avg} EUR/l")
+                    except: pass
 
         found = {k: v for k, v in countries.items() if v is not None}
         if found:
-            log("EU Bulletin", f"EC XLSX: {found}, avg={eu_avg}, DE={de_diesel}, date={ec_date}")
+            log("EU Bulletin", f"DIESEL prices: {found}, avg={eu_avg}, DE={de_diesel}, date={ec_date}")
             result = {**countries, "EU_AVG": eu_avg}
             if de_diesel: result["DE"] = de_diesel
-            if ec_date: result["_date"] = ec_date  # pass actual EC date
+            if ec_date: result["_date"] = ec_date
             return result
 
-        log("EU Bulletin", "No data in EC XLSX", "WARN")
+        log("EU Bulletin", "No diesel data found in EC XLSX", "WARN")
         return fetch_eu_bulletin_fallback()
 
     except Exception as e:
