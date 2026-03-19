@@ -1,5 +1,6 @@
 """
-Fuel Price Tracker v6 — EU Bulletin direct from EC XLSX
+Fuel Price Tracker v6
+EC XLSX direct download, date from EC file, duplicate fix, DE from EC
 """
 import requests, json, re, os, sys, io, calendar
 from datetime import datetime, timedelta
@@ -18,13 +19,27 @@ WDAY = TODAY.weekday()
 def log(s, m, l="INFO"): print(f"[{l}] {s}: {m}")
 
 def clean_num(s):
+    """Parse numbers like '1 756.06', '6 192', '1,234.56', '1234,56'"""
     if s is None: return None
     s = str(s).strip()
+    # Remove currency symbols and whitespace-like chars
     s = re.sub(r'[€$£\xa0]', '', s)
-    if re.match(r'^\d[\d ]+\.\d+$', s): return float(s.replace(' ', ''))
-    if re.match(r'^\d[\d ]+,\d+$', s): return float(s.replace(' ', '').replace(',', '.'))
-    if ',' in s and '.' in s: return float(s.replace(',', ''))
-    if ',' in s: s = s.replace(',', '.')
+    # Handle "1 756.06" — spaces as thousand separators, dot as decimal
+    if re.match(r'^\d[\d ]+\.\d+$', s):
+        s = s.replace(' ', '')
+        return float(s)
+    # Handle "1 756,06" — spaces as thousand sep, comma as decimal
+    if re.match(r'^\d[\d ]+,\d+$', s):
+        s = s.replace(' ', '').replace(',', '.')
+        return float(s)
+    # Handle "1,234.56"
+    if ',' in s and '.' in s:
+        s = s.replace(',', '')
+        return float(s)
+    # Handle "1234,56"
+    if ',' in s and '.' not in s:
+        s = s.replace(',', '.')
+    # Remove remaining spaces
     s = s.replace(' ', '')
     try: return float(s)
     except: return None
@@ -43,7 +58,7 @@ def fetch_fx():
         log("FX", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# 2. ORLEN PL — via petrodom.pl
+# 2. ORLEN PL
 # ═══════════════════════════════════════
 def fetch_orlen_pl():
     try:
@@ -104,9 +119,11 @@ def parse_orlen_lt_pdf(pdf_bytes):
             for line in text.split('\n'):
                 if 'Dyzelinas E kl. su RRME' not in line:
                     continue
+                # Extract numbers like "897.69" and "1 756.06"
                 nums = re.findall(r'(\d[\d ]*\.\d{2})', line)
                 cleaned = [float(n.replace(' ', '')) for n in nums]
                 if cleaned:
+                    # LAST number = Pardavimo kaina su PVM (EUR/1000l)
                     selling_price = cleaned[-1]
                     if 1000 < selling_price < 2500:
                         eur_l = round(selling_price / 1000, 4)
@@ -127,7 +144,8 @@ def fetch_elvis_de():
         r = requests.get("https://www.fuel-prices.eu/cheapest/", headers=H, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        for table in soup.find_all("table"):
+        tables = soup.find_all("table")
+        for table in tables:
             if "diesel" not in table.get_text(" ", strip=True).lower(): continue
             for row in table.find_all("tr"):
                 cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
@@ -167,6 +185,7 @@ def fetch_bsh_se():
 # 6. EU BULLETIN — direct EC XLSX download
 # ═══════════════════════════════════════
 def fetch_eu_bulletin():
+    """Download EC Weekly Oil Bulletin XLSX and extract diesel prices + actual date"""
     try:
         url = "https://energy.ec.europa.eu/document/download/264c2d0f-f161-4ea3-a777-78faae59bea0_en?filename=Weekly%20Oil%20Bulletin%20Weekly%20prices%20with%20Taxes%20-%202024-02-19.xlsx"
         log("EU Bulletin", "Downloading EC XLSX...")
@@ -183,11 +202,28 @@ def fetch_eu_bulletin():
                     "Denmark": "DK", "Sweden": "SE", "Finland": "FI"}
         eu_avg = None
         de_diesel = None
+        ec_date = None  # actual date from EC file
 
         for sname in wb.sheetnames:
             ws = wb[sname]
             log("EU Bulletin", f"Sheet: {sname} ({ws.max_row}r x {ws.max_column}c)")
             for row in range(1, ws.max_row + 1):
+                # Try to find date in any cell of first few rows
+                if row <= 5 and ec_date is None:
+                    for col in range(1, min(10, ws.max_column + 1)):
+                        val = ws.cell(row=row, column=col).value
+                        if val is None: continue
+                        if hasattr(val, 'strftime'):
+                            ec_date = val.strftime('%Y-%m-%d')
+                            log("EU Bulletin", f"EC date found: {ec_date}")
+                        elif isinstance(val, str):
+                            # Try to find date pattern in text like "Prices at 17/03/2026" or "17.03.2026"
+                            dm = re.search(r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', str(val))
+                            if dm:
+                                d,m,y = dm.group(1),dm.group(2),dm.group(3)
+                                ec_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                                log("EU Bulletin", f"EC date from text: {ec_date}")
+
                 cell0 = str(ws.cell(row=row, column=1).value or "").strip()
                 if not cell0: continue
 
@@ -225,9 +261,10 @@ def fetch_eu_bulletin():
 
         found = {k: v for k, v in countries.items() if v is not None}
         if found:
-            log("EU Bulletin", f"EC XLSX: {found}, avg={eu_avg}, DE={de_diesel}")
+            log("EU Bulletin", f"EC XLSX: {found}, avg={eu_avg}, DE={de_diesel}, date={ec_date}")
             result = {**countries, "EU_AVG": eu_avg}
             if de_diesel: result["DE"] = de_diesel
+            if ec_date: result["_date"] = ec_date  # pass actual EC date
             return result
 
         log("EU Bulletin", "No data in EC XLSX", "WARN")
@@ -239,6 +276,7 @@ def fetch_eu_bulletin():
 
 
 def fetch_eu_bulletin_fallback():
+    """Fallback: fuel-prices.eu"""
     try:
         r = requests.get("https://www.fuel-prices.eu/cheapest/", headers=H, timeout=20)
         r.raise_for_status()
@@ -262,6 +300,8 @@ def fetch_eu_bulletin_fallback():
         text = soup.get_text(" ", strip=True)
         m = re.search(r'€(\d\.\d{3})/L\s+for\s+diesel', text)
         if m: eu_avg = float(m.group(1))
+        # Try to find date
+        dm = re.search(r'(\w+\s+\d{1,2},?\s+\d{4})', text)
         found = {k:v for k,v in countries.items() if v}
         if found:
             log("EU Bulletin fallback", f"{found}, avg={eu_avg}")
@@ -271,9 +311,10 @@ def fetch_eu_bulletin_fallback():
         log("EU Bulletin fallback", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# EXCEL: duplicate check
+# EXCEL: check if date already exists
 # ═══════════════════════════════════════
 def date_exists_in_daily(ws, target_date):
+    """Check if today's date already has data in Daily Tracker"""
     for row in range(5, min(15, ws.max_row + 1)):
         cell = ws.cell(row=row, column=1).value
         if cell is None: continue
@@ -285,12 +326,17 @@ def date_exists_in_daily(ws, target_date):
             return row
     return None
 
-def date_exists_in_weekly(ws, monday):
-    for row in range(4, min(14, ws.max_row + 1)):
+def date_exists_in_weekly(ws, date_str):
+    """Check if this week's data already exists. date_str = 'YYYY-MM-DD'"""
+    for row in range(4, min(ws.max_row + 1, 100)):
         cell = ws.cell(row=row, column=1).value
         if cell is None: continue
-        cell_date = cell.date() if hasattr(cell, 'date') else None
-        if cell_date and cell_date == monday.date(): return row
+        if hasattr(cell, 'strftime'):
+            if cell.strftime('%Y-%m-%d') == date_str: return row
+        elif hasattr(cell, 'date'):
+            if cell.date().strftime('%Y-%m-%d') == date_str: return row
+        elif isinstance(cell, str) and cell[:10] == date_str:
+            return row
     return None
 
 # ═══════════════════════════════════════
@@ -303,14 +349,16 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 
     if "Daily Tracker" in wb.sheetnames:
         ws = wb["Daily Tracker"]
+        
+        # Check if today already exists — update instead of insert
         existing_row = date_exists_in_daily(ws, TODAY)
         if existing_row:
             row = existing_row
-            log("Excel", f"Updating row {row} for {TODAY_STR}")
+            log("Excel", f"Updating existing row {row} for {TODAY_STR}")
         else:
             ws.insert_rows(5)
             row = 5
-            log("Excel", f"Inserting row {row} for {TODAY_STR}")
+            log("Excel", f"Inserting new row {row} for {TODAY_STR}")
 
         ifont = Font(name="Aptos", size=10, color="1D4ED8")
         ifill = PatternFill("solid", fgColor="EFF6FF")
@@ -319,6 +367,7 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 
         def wc(col, val, fmt='General', font=dfont, fill=None):
             c = ws.cell(row=row, column=col)
+            # Only overwrite if we have new data, keep existing if None
             if val is not None or c.value is None:
                 c.value = val
             c.number_format = fmt; c.font = font; c.border = brd
@@ -329,49 +378,58 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
         wc(2, calendar.day_abbr[WDAY], font=Font(name="Aptos",size=9,color="6B7280"))
         wc(3, orlen_pl["price_pln_m3"] if orlen_pl else None, '#,##0.00', ifont, ifill)
         wc(4, fx["PLN_EUR"] if fx else None, '0.0000', ifont, ifill)
-
+        
         pl_eur_l = round(orlen_pl["price_pln_m3"] / fx["PLN_EUR"] / 1000, 4) if (orlen_pl and fx and fx.get("PLN_EUR")) else None
         wc(5, pl_eur_l, '0.000')
-
+        
         lt_val = orlen_lt["price_eur_l"] if orlen_lt else None
         wc(6, lt_val, '0.000', ifont, ifill)
-
+        
         delta = round(pl_eur_l - lt_val, 4) if (pl_eur_l and lt_val) else None
         wc(7, delta, '+0.000;-0.000;"-"')
         delta_pct = round(delta / lt_val, 4) if (delta is not None and lt_val) else None
         wc(8, delta_pct, '+0.0%;-0.0%;"-"')
-
-        de_price = None
+        
+        wc(9, elvis_de["price_eur_l"] if elvis_de else None, '0.000', ifont, ifill)
+        # If EC has Germany diesel, prefer it over fuel-prices.eu
         if eu_bulletin and eu_bulletin.get("DE"):
-            de_price = eu_bulletin["DE"]
-        elif elvis_de:
-            de_price = elvis_de["price_eur_l"]
-        wc(9, de_price, '0.000', ifont, ifill)
+            wc(9, eu_bulletin["DE"], '0.000', ifont, ifill)
 
         wc(10, bsh_se["price_sek_l"] if bsh_se else None, '0.00', ifont, ifill)
         wc(11, fx["SEK_EUR"] if fx else None, '0.0000', ifont, ifill)
-
+        
         se_eur = round(bsh_se["price_sek_l"] / fx["SEK_EUR"], 4) if (bsh_se and fx and fx.get("SEK_EUR")) else None
         wc(12, se_eur, '0.000')
-
+        
         ok = [k for k,v in {"FX":fx,"PL":orlen_pl,"LT":orlen_lt,"DE":(elvis_de or (eu_bulletin and eu_bulletin.get("DE"))),"SE":bsh_se,"EU":eu_bulletin}.items() if v]
         wc(13, f"Auto: {','.join(ok)}", font=Font(name="Aptos",size=9,color="6B7280"))
         wc(14, "Auto", font=Font(name="Aptos",size=8,color="9CA3AF"))
         log("Excel", f"Row {row}: {TODAY_STR} [{','.join(ok)}]")
 
+    # Weekly — use actual EC date, not calculated Monday
     if eu_bulletin and "Weekly Oil Bulletin" in wb.sheetnames:
         ws_w = wb["Weekly Oil Bulletin"]
-        monday = TODAY - timedelta(days=WDAY)
-        existing = date_exists_in_weekly(ws_w, monday)
+        
+        # Use date from EC file if available, otherwise calculate Monday
+        ec_date_str = eu_bulletin.get("_date")
+        if ec_date_str:
+            week_date = datetime.strptime(ec_date_str, "%Y-%m-%d")
+            log("Excel", f"Using EC date: {ec_date_str}")
+        else:
+            week_date = TODAY - timedelta(days=WDAY)
+            ec_date_str = week_date.strftime("%Y-%m-%d")
+            log("Excel", f"Using calculated Monday: {ec_date_str}")
+        
+        existing = date_exists_in_weekly(ws_w, ec_date_str)
         if existing:
             w_row = existing
-            log("Excel", f"Updating weekly row {w_row}")
+            log("Excel", f"Updating weekly row {w_row} for {ec_date_str}")
         else:
             ws_w.insert_rows(4)
             w_row = 4
-            log("Excel", f"Inserting weekly row {w_row}")
-
-        ws_w.cell(row=w_row,column=1).value = monday
+            log("Excel", f"Inserting weekly row {w_row} for {ec_date_str}")
+        
+        ws_w.cell(row=w_row,column=1).value = week_date
         ws_w.cell(row=w_row,column=1).number_format = 'YYYY-MM-DD'
         ws_w.cell(row=w_row,column=1).font = Font(name="Aptos",size=10,bold=True,color="1F2937")
         for k,col in {"LT":2,"LV":3,"EE":4,"DK":5,"SE":6,"FI":7,"EU_AVG":8}.items():
@@ -392,7 +450,7 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 # MAIN
 # ═══════════════════════════════════════
 def main():
-    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v6 — {TODAY_STR}\n{'='*60}\n")
+    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v5 — {TODAY_STR}\n{'='*60}\n")
     R = {}
     print("── FX Rates ──"); R["fx"] = fetch_fx()
     if WDAY < 5:
@@ -403,8 +461,8 @@ def main():
     else:
         print("\n── Weekend ──")
         for k in ["orlen_pl","orlen_lt","elvis_de","bsh_se"]: R[k] = None
-    print("\n── EU Oil Bulletin (EC XLSX) ──"); R["eu_bulletin"] = fetch_eu_bulletin()
-
+    print("\n── EU Oil Bulletin ──"); R["eu_bulletin"] = fetch_eu_bulletin()
+    
     print(f"\n{'─'*60}")
     ok = sum(1 for v in R.values() if v is not None)
     print(f"RESULTS: {ok}/{len(R)}")
