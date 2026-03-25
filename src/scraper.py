@@ -58,24 +58,44 @@ def fetch_fx():
         log("FX", str(e), "ERROR"); return None
 
 # ═══════════════════════════════════════
-# 2. ORLEN PL
+# 2. ORLEN PL — via petrodom.pl
 # ═══════════════════════════════════════
 def fetch_orlen_pl():
     try:
-        r = requests.get("https://www.petrodom.pl/en/current-wholesale-fuel-prices-provided-by-pkn-orlen/", headers=H, timeout=20)
+        url = "https://www.petrodom.pl/en/current-wholesale-fuel-prices-provided-by-pkn-orlen/"
+        r = requests.get(url, headers=H, timeout=20)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        for table in soup.find_all("table"):
+        
+        # Method 1: Table parsing
+        tables = soup.find_all("table")
+        log("Orlen PL", f"Found {len(tables)} tables")
+        for table in tables:
             for row in table.find_all("tr"):
                 cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
                 for i, cell in enumerate(cells):
-                    if "ekodiesel" in cell.lower():
+                    if "ekodiesel" in cell.lower() and "arktyczny" not in cell.lower() and "grzewczy" not in cell.lower():
+                        log("Orlen PL", f"Found Ekodiesel cell: {repr(cell)}")
                         for j in range(i+1, min(i+3, len(cells))):
-                            price = clean_num(cells[j])
+                            raw = cells[j]
+                            log("Orlen PL", f"  Price cell: {repr(raw)}")
+                            price = clean_num(raw)
                             if price and 3000 < price < 10000:
                                 log("Orlen PL", f"Ekodiesel = {price} PLN/m³")
                                 return {"price_pln_m3": price}
-        log("Orlen PL", "Not found", "WARN"); return None
+        
+        # Method 2: Text fallback — search full page text
+        text = soup.get_text(" ", strip=True)
+        log("Orlen PL", f"Table parsing failed, trying text search...")
+        m = re.search(r'[Ee]kodiesel[^0-9]{0,60}?(\d[\d\s\xa0]*\d)', text)
+        if m:
+            price = clean_num(m.group(1))
+            if price and 3000 < price < 10000:
+                log("Orlen PL", f"Ekodiesel (text fallback) = {price} PLN/m³")
+                return {"price_pln_m3": price}
+        
+        log("Orlen PL", "Not found in tables or text", "WARN")
+        return None
     except Exception as e:
         log("Orlen PL", str(e), "ERROR"); return None
 
