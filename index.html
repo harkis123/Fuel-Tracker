@@ -220,7 +220,22 @@ D.forEach(r=>{
   dt+=`<td class="nm ${dc}">${dltP!=null?(dltP>0?'+':'')+(dltP*100).toFixed(1)+'%':'—'}</td>`;
   dt+=`<td class="nm">${EM?ei('deEur',r.deEur):f(deD)}</td>`;
   dt+=`<td class="nm">${EM?ei('seEur',r.seEur):f(seD)}</td>`;
-  dt+=`<td>${r.notes}</td></tr>`;});
+  // Notes: in edit mode show failure reasons, otherwise just source list
+  const notesParts=(r.notes||'').split('|');
+  const srcPart=notesParts[0]||'';
+  const missPart=notesParts[1]||'';
+  if(EM&&missPart){
+    // Parse MISS:PL=NO_DATA,LT=TIMEOUT
+    const reasons=missPart.replace('MISS:','').split(',').map(p=>{
+      const [k,v]=p.split('=');
+      const color=v==='TIMEOUT'||v==='PARSE_ERR'?'var(--red)':'var(--amber)';
+      const label={'NO_DATA':'šaltinis nepateikė','NO_PDF':'PDF nerasta','TIMEOUT':'timeout','WEEKEND':'savaitgalis','PARSE_ERR':'klaida'}[v]||v;
+      return`<span style="color:${color};font-size:9px" title="${k}: ${label}">⚠${k}</span>`;
+    }).join(' ');
+    dt+=`<td style="font-size:9px">${srcPart}<br>${reasons}</td></tr>`;
+  }else{
+    dt+=`<td style="font-size:9px;color:var(--t5)">${srcPart}</td></tr>`;
+  }});
 dt+='</tbody></table>';document.getElementById('dt').innerHTML=dt;
 
 const sw=SHOW_VAT.weekly;
