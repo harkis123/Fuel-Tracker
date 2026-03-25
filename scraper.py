@@ -45,26 +45,52 @@ def clean_num(s):
     except: return None
 
 # ═══════════════════════════════════════
-# 1. FX RATES
+# 1. FX RATES — with multiple fallback APIs
 # ═══════════════════════════════════════
 def fetch_fx():
+    import time
+    
+    # Source 1: frankfurter.app (ECB data)
     try:
         r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
         r.raise_for_status()
         d = r.json().get("rates", {})
-        log("FX", f"PLN={d.get('PLN')}, SEK={d.get('SEK')}")
-        return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
+        if d.get("PLN") and d.get("SEK"):
+            log("FX", f"frankfurter.app: PLN={d['PLN']}, SEK={d['SEK']}")
+            return {"PLN_EUR": d["PLN"], "SEK_EUR": d["SEK"]}
     except Exception as e:
-        log("FX", f"Attempt 1 failed: {e}, retrying...", "WARN")
-        try:
-            import time; time.sleep(3)
-            r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
-            r.raise_for_status()
-            d = r.json().get("rates", {})
-            log("FX", f"Retry OK: PLN={d.get('PLN')}, SEK={d.get('SEK')}")
-            return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
-        except Exception as e2:
-            log("FX", str(e2), "ERROR"); return None
+        log("FX", f"frankfurter.app failed: {e}", "WARN")
+    
+    time.sleep(2)
+    
+    # Source 2: exchangerate.host (free, no key needed)
+    try:
+        r = requests.get("https://api.exchangerate.host/latest?base=EUR&symbols=PLN,SEK", timeout=30)
+        r.raise_for_status()
+        d = r.json().get("rates", {})
+        if d.get("PLN") and d.get("SEK"):
+            log("FX", f"exchangerate.host: PLN={d['PLN']}, SEK={d['SEK']}")
+            return {"PLN_EUR": d["PLN"], "SEK_EUR": d["SEK"]}
+    except Exception as e:
+        log("FX", f"exchangerate.host failed: {e}", "WARN")
+    
+    time.sleep(2)
+    
+    # Source 3: ECB direct XML
+    try:
+        r = requests.get("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml", timeout=30)
+        r.raise_for_status()
+        pln = re.search(r"currency='PLN'\s+rate='([\d.]+)'", r.text)
+        sek = re.search(r"currency='SEK'\s+rate='([\d.]+)'", r.text)
+        if pln and sek:
+            pln_v, sek_v = float(pln.group(1)), float(sek.group(1))
+            log("FX", f"ECB XML: PLN={pln_v}, SEK={sek_v}")
+            return {"PLN_EUR": pln_v, "SEK_EUR": sek_v}
+    except Exception as e:
+        log("FX", f"ECB XML failed: {e}", "WARN")
+    
+    log("FX", "All 3 sources failed!", "ERROR")
+    return None
 
 # ═══════════════════════════════════════
 # 2. ORLEN PL — via petrodom.pl
@@ -395,7 +421,8 @@ def date_exists_in_weekly(ws, date_str):
 # ═══════════════════════════════════════
 # EXCEL WRITER
 # ═══════════════════════════════════════
-def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=None, eu_bulletin=None):
+def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=None, eu_bulletin=None, _failures=None):
+    if _failures is None: _failures = {}
     if not EXCEL_PATH.exists():
         log("Excel", f"Not found: {EXCEL_PATH}", "ERROR"); return False
     wb = load_workbook(str(EXCEL_PATH))
@@ -455,7 +482,11 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
         wc(12, se_eur, '0.000')
         
         ok = [k for k,v in {"FX":fx,"PL":orlen_pl,"LT":orlen_lt,"DE":(elvis_de or (eu_bulletin and eu_bulletin.get("DE"))),"SE":bsh_se,"EU":eu_bulletin}.items() if v]
-        wc(13, f"Auto: {','.join(ok)}", font=Font(name="Aptos",size=9,color="6B7280"))
+        notes = f"Auto: {','.join(ok)}"
+        if _failures:
+            miss = ','.join([f"{k}={v}" for k,v in _failures.items()])
+            notes += f"|MISS:{miss}"
+        wc(13, notes, font=Font(name="Aptos",size=9,color="6B7280"))
         wc(14, "Auto", font=Font(name="Aptos",size=8,color="9CA3AF"))
         log("Excel", f"Row {row}: {TODAY_STR} [{','.join(ok)}]")
 
@@ -503,27 +534,42 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
 # MAIN
 # ═══════════════════════════════════════
 def main():
-    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v5 — {TODAY_STR}\n{'='*60}\n")
+    print(f"\n{'='*60}\n  FUEL PRICE TRACKER v6 — {TODAY_STR}\n{'='*60}\n")
     R = {}
+    FAIL = {}  # track why each source failed
+    
     print("── FX Rates ──"); R["fx"] = fetch_fx()
+    if not R["fx"]: FAIL["FX"] = "TIMEOUT"
+    
     if WDAY < 5:
         print("\n── Orlen PL ──"); R["orlen_pl"] = fetch_orlen_pl()
+        if not R["orlen_pl"]: FAIL["PL"] = "NO_DATA"
+        
         print("\n── Orlen LT (PDF) ──"); R["orlen_lt"] = fetch_orlen_lt()
+        if not R["orlen_lt"]: FAIL["LT"] = "NO_PDF"
+        
         print("\n── Elvis DE (Diesel) ──"); R["elvis_de"] = fetch_elvis_de()
+        if not R["elvis_de"]: FAIL["DE"] = "NO_DATA"
+        
         print("\n── BSH/ST1 SE ──"); R["bsh_se"] = fetch_bsh_se()
+        if not R["bsh_se"]: FAIL["SE"] = "NO_DATA"
     else:
         print("\n── Weekend ──")
         for k in ["orlen_pl","orlen_lt","elvis_de","bsh_se"]: R[k] = None
-    print("\n── EU Oil Bulletin ──"); R["eu_bulletin"] = fetch_eu_bulletin()
+        FAIL = {"PL":"WEEKEND","LT":"WEEKEND","DE":"WEEKEND","SE":"WEEKEND"}
+    
+    print("\n── EU Oil Bulletin (EC XLSX) ──"); R["eu_bulletin"] = fetch_eu_bulletin()
+    if not R["eu_bulletin"]: FAIL["EU"] = "NO_DATA"
     
     print(f"\n{'─'*60}")
     ok = sum(1 for v in R.values() if v is not None)
     print(f"RESULTS: {ok}/{len(R)}")
     for k,v in R.items(): print(f"  {'✅' if v else '❌'} {k}: {v if v else 'FAILED'}")
+    if FAIL: print(f"  Failures: {FAIL}")
     print(f"{'─'*60}\n── Updating Excel ──")
-    success = update_excel(**R)
+    success = update_excel(**R, _failures=FAIL)
     Path(EXCEL_PATH.parent / "latest_results.json").write_text(
-        json.dumps({"date":TODAY_STR,"results":{k:bool(v) for k,v in R.items()},"data":{k:v for k,v in R.items() if v}}, indent=2, default=str))
+        json.dumps({"date":TODAY_STR,"results":{k:bool(v) for k,v in R.items()},"data":{k:v for k,v in R.items() if v},"failures":FAIL}, indent=2, default=str))
     print(f"\n{'✅ Done!' if success else '❌ Failed!'}")
     if not success: sys.exit(1)
 
