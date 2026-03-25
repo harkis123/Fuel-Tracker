@@ -45,26 +45,52 @@ def clean_num(s):
     except: return None
 
 # ═══════════════════════════════════════
-# 1. FX RATES
+# 1. FX RATES — with multiple fallback APIs
 # ═══════════════════════════════════════
 def fetch_fx():
+    import time
+    
+    # Source 1: frankfurter.app (ECB data)
     try:
         r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
         r.raise_for_status()
         d = r.json().get("rates", {})
-        log("FX", f"PLN={d.get('PLN')}, SEK={d.get('SEK')}")
-        return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
+        if d.get("PLN") and d.get("SEK"):
+            log("FX", f"frankfurter.app: PLN={d['PLN']}, SEK={d['SEK']}")
+            return {"PLN_EUR": d["PLN"], "SEK_EUR": d["SEK"]}
     except Exception as e:
-        log("FX", f"Attempt 1 failed: {e}, retrying...", "WARN")
-        try:
-            import time; time.sleep(3)
-            r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
-            r.raise_for_status()
-            d = r.json().get("rates", {})
-            log("FX", f"Retry OK: PLN={d.get('PLN')}, SEK={d.get('SEK')}")
-            return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
-        except Exception as e2:
-            log("FX", str(e2), "ERROR"); return None
+        log("FX", f"frankfurter.app failed: {e}", "WARN")
+    
+    time.sleep(2)
+    
+    # Source 2: exchangerate.host (free, no key needed)
+    try:
+        r = requests.get("https://api.exchangerate.host/latest?base=EUR&symbols=PLN,SEK", timeout=30)
+        r.raise_for_status()
+        d = r.json().get("rates", {})
+        if d.get("PLN") and d.get("SEK"):
+            log("FX", f"exchangerate.host: PLN={d['PLN']}, SEK={d['SEK']}")
+            return {"PLN_EUR": d["PLN"], "SEK_EUR": d["SEK"]}
+    except Exception as e:
+        log("FX", f"exchangerate.host failed: {e}", "WARN")
+    
+    time.sleep(2)
+    
+    # Source 3: ECB direct XML
+    try:
+        r = requests.get("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml", timeout=30)
+        r.raise_for_status()
+        pln = re.search(r"currency='PLN'\s+rate='([\d.]+)'", r.text)
+        sek = re.search(r"currency='SEK'\s+rate='([\d.]+)'", r.text)
+        if pln and sek:
+            pln_v, sek_v = float(pln.group(1)), float(sek.group(1))
+            log("FX", f"ECB XML: PLN={pln_v}, SEK={sek_v}")
+            return {"PLN_EUR": pln_v, "SEK_EUR": sek_v}
+    except Exception as e:
+        log("FX", f"ECB XML failed: {e}", "WARN")
+    
+    log("FX", "All 3 sources failed!", "ERROR")
+    return None
 
 # ═══════════════════════════════════════
 # 2. ORLEN PL — via petrodom.pl
