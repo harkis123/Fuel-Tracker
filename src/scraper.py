@@ -49,13 +49,22 @@ def clean_num(s):
 # ═══════════════════════════════════════
 def fetch_fx():
     try:
-        r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=15)
+        r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
         r.raise_for_status()
         d = r.json().get("rates", {})
         log("FX", f"PLN={d.get('PLN')}, SEK={d.get('SEK')}")
         return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
     except Exception as e:
-        log("FX", str(e), "ERROR"); return None
+        log("FX", f"Attempt 1 failed: {e}, retrying...", "WARN")
+        try:
+            import time; time.sleep(3)
+            r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=PLN,SEK", timeout=30)
+            r.raise_for_status()
+            d = r.json().get("rates", {})
+            log("FX", f"Retry OK: PLN={d.get('PLN')}, SEK={d.get('SEK')}")
+            return {"PLN_EUR": d.get("PLN"), "SEK_EUR": d.get("SEK")}
+        except Exception as e2:
+            log("FX", str(e2), "ERROR"); return None
 
 # ═══════════════════════════════════════
 # 2. ORLEN PL — via petrodom.pl
@@ -287,17 +296,21 @@ def fetch_eu_bulletin():
                         log("EU Bulletin", f"  Germany: {v} → {de_diesel} EUR/l")
                     except: pass
 
-            # EU weighted average
+            # EU weighted average — take EU27, skip Euro Area
             c0l = cell0.lower()
-            if ("eu" in c0l or "ce/ec" in c0l or "eur27" in c0l) and ("average" in c0l or "weighted" in c0l or "moyenne" in c0l or "durchschnitt" in c0l):
-                val = ws.cell(row=row, column=diesel_col).value
-                if val is not None:
-                    try:
-                        v = float(val)
-                        if 0.5 < v < 3.5: eu_avg = round(v, 4)
-                        elif 500 < v < 3500: eu_avg = round(v / 1000, 4)
-                        log("EU Bulletin", f"  EU avg: {v} → {eu_avg} EUR/l")
-                    except: pass
+            if eu_avg is None and ("ce/ec" in c0l or "eur27" in c0l or "eu" in c0l) and ("average" in c0l or "weighted" in c0l or "moyenne" in c0l or "durchschnitt" in c0l):
+                # Skip "Euro Area" — we want EU27
+                if "euro area" in c0l or "eurozone" in c0l:
+                    log("EU Bulletin", f"  Skipping Euro Area row: {cell0[:60]}")
+                else:
+                    val = ws.cell(row=row, column=diesel_col).value
+                    if val is not None:
+                        try:
+                            v = float(val)
+                            if 0.5 < v < 3.5: eu_avg = round(v, 4)
+                            elif 500 < v < 3500: eu_avg = round(v / 1000, 4)
+                            log("EU Bulletin", f"  EU27 avg: {v} → {eu_avg} EUR/l")
+                        except: pass
 
         found = {k: v for k, v in countries.items() if v is not None}
         if found:
