@@ -1,5 +1,5 @@
 {
-  "date": "2026-03-26",
+  "date": "2026-03-27",
   "results": {
     "fx": true,
     "orlen_pl": true,
@@ -10,20 +10,20 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2718,
-      "SEK_EUR": 10.7715
+      "PLN_EUR": 4.2743,
+      "SEK_EUR": 10.8405
     },
     "orlen_pl": {
-      "price_pln_m3": 6749.0
+      "price_pln_m3": 6870.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.9581
+      "price_eur_l": 1.8704
     },
     "elvis_de": {
-      "price_eur_l": 2.146
+      "price_eur_l": 2.297
     },
     "bsh_se": {
-      "price_sek_l": 23.49
+      "price_sek_l": 22.59
     },
     "eu_bulletin": {
       "LT": 2.1005,
@@ -32,8 +32,8 @@
       "DK": 2.3826,
       "SE": 2.2446,
       "FI": 2.3196,
-      "EU_AVG": 2.0347,
-      "DE": 2.13,
+      "EU_AVG": 2.0634,
+      "DE": 2.297,
       "_date": "2026-03-23"
     }
   }
