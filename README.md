@@ -94,11 +94,18 @@ GitHub Actions (cron: 08:30 UTC, Mon-Fri)
 ```
 fuel-tracker/
 ├── .github/workflows/
-│   └── update-prices.yml    ← GitHub Actions workflow
+│   └── update-prices.yml    ← GitHub Actions workflow (pinned SHAs)
 ├── src/
-│   └── scraper.py           ← Pagrindinis scraper
+│   ├── config.py            ← Centralizuota konfigūracija (URLs, ribos, konstantos)
+│   ├── scraper.py           ← Pagrindinis scraper (v7: logging, retries, type hints)
+│   └── backfill.py          ← Istorinių duomenų užpildymas
+├── tests/
+│   └── test_scraper.py      ← Unit testai (pytest)
 ├── fuel_tracker.xlsx         ← Excel failas (atnaujinamas automatiškai)
-├── latest_results.json       ← Paskutinio run rezultatai
-├── requirements.txt          ← Python dependencies
+├── latest_results.json       ← Paskutinio run rezultatai + šaltinių statusas
+├── index.html                ← Dashboard (vanilla JS, offline cache)
+├── requirements.txt          ← Python dependencies (pinned versions)
+├── CONTRIBUTING.md           ← Kaip pridėti naujus šaltinius
+├── .gitignore                ← Git ignore rules
 └── README.md                 ← Šis failas
 ```
