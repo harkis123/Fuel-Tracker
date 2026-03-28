@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="lt">
+<html lang="lt" role="application">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,10 +54,10 @@
 </head>
 <body>
 <div class="app">
-<header class="hdr"><div class="brand"><div class="logo">⛽</div><div><div class="brand-title">Fuel Price Tracker</div><div class="brand-sub" id="st">Loading...</div></div></div><nav class="nav"><button class="nav-b on" data-t="dash">◉ Dashboard</button><button class="nav-b" data-t="daily">◫ Daily Data</button><button class="nav-b" data-t="weekly">◧ EU Bulletin</button><button class="nav-b" data-t="src">◎ Sources</button></nav><div class="hdr-right"><div class="dot loading" id="dot"></div><button class="rbtn" onclick="init()">↻ Refresh</button><button class="rbtn" onclick="downloadExcel()" style="background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none">📥 Excel</button><button class="rbtn" id="eBtn" onclick="toggleEdit()">🔒 Edit</button></div></header>
+<header class="hdr" role="banner"><div class="brand"><div class="logo" aria-hidden="true">⛽</div><div><div class="brand-title">Fuel Price Tracker</div><div class="brand-sub" id="st" aria-live="polite">Loading...</div></div></div><nav class="nav" role="navigation" aria-label="Main navigation"><button class="nav-b on" data-t="dash" aria-label="Dashboard">◉ Dashboard</button><button class="nav-b" data-t="daily" aria-label="Daily Data">◫ Daily Data</button><button class="nav-b" data-t="weekly" aria-label="EU Bulletin">◧ EU Bulletin</button><button class="nav-b" data-t="src" aria-label="Sources">◎ Sources</button></nav><div class="hdr-right"><div class="dot loading" id="dot" role="status" aria-label="Connection status"></div><button class="rbtn" onclick="init()" aria-label="Refresh data">↻ Refresh</button><button class="rbtn" onclick="downloadExcel()" style="background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none" aria-label="Download Excel">📥 Excel</button><button class="rbtn" id="eBtn" onclick="toggleEdit()" aria-label="Toggle edit mode">🔒 Edit</button></div></header>
 <div class="ub" id="ub">⏳ Loading...</div>
 <div class="eb hidden" id="eBar">✏️ EDIT MODE — Click values to edit <button class="sb" onclick="downloadExcel()">📥 Download</button> <button class="sb" onclick="saveToGitHub()" style="background:linear-gradient(135deg,var(--blue),#2563eb)">☁️ Save to GitHub</button> <button class="sb" onclick="runScraper()" style="background:linear-gradient(135deg,var(--purple),#7c3aed)">🚀 Run Scraper</button> <button class="cb" onclick="cancelEdit()">Cancel</button> <span style="font-size:10px;margin-left:8px" id="saveStatus"></span></div>
-<main class="main">
+<main class="main" role="main">
 <section id="tab-dash"><div style="display:flex;justify-content:flex-end;margin-bottom:12px" id="vat-dash"></div><div class="gk" id="kpi"></div><div class="g2"><div class="pnl"><div class="pnl-h"><span class="pnl-t">14-Day Trends</span></div><div class="pnl-b" id="spk"></div></div><div class="pnl"><div class="pnl-h"><span class="pnl-t">EU Oil Bulletin</span><span class="pnl-st" id="eul"></span></div><div class="pnl-b"><div class="bars" id="bch"></div></div></div></div></section>
 <section id="tab-daily" class="hidden"><div class="stt">Daily Price Log <span class="c" id="dc"></span><div id="vat-daily"></div></div><div class="pnl"><div class="tw" id="dt"></div></div></section>
 <section id="tab-weekly" class="hidden"><div class="stt">EU Weekly Oil Bulletin <span class="c" id="wc"></span><div id="vat-weekly"></div></div><div class="pnl"><div class="tw" id="wt"></div></div></section>
@@ -80,7 +80,8 @@ function toggleVat(tab){SHOW_VAT[tab]=!SHOW_VAT[tab];render();}
 document.querySelectorAll('.nav-b').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav-b').forEach(x=>x.classList.remove('on'));b.classList.add('on');['dash','daily','weekly','src'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hidden',t!==b.dataset.t));}));
 
 function toggleEdit(){if(EM){cancelEdit();return;}document.getElementById('pm').classList.remove('hidden');document.getElementById('pi').value='';document.getElementById('ti').value=sessionStorage.getItem('gh_token')||'';document.getElementById('pe').classList.add('hidden');setTimeout(()=>document.getElementById('pi').focus(),100);}
-function ck(){const pw=document.getElementById('pi').value,tk=document.getElementById('ti').value.trim();if(pw!=='sltpara'){document.getElementById('pe').textContent='Wrong password';document.getElementById('pe').classList.remove('hidden');return;}if(tk)sessionStorage.setItem('gh_token',tk);EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}
+async function hashPw(pw){const enc=new TextEncoder().encode(pw);const buf=await crypto.subtle.digest('SHA-256',enc);return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+async function ck(){const pw=document.getElementById('pi').value,tk=document.getElementById('ti').value.trim();const h=await hashPw(pw);if(h!=='a0f3285b30e9eeed8a40e7e2de1e753d2fb7edab3ab05e67e196cad593b50ba0'){document.getElementById('pe').textContent='Wrong password';document.getElementById('pe').classList.remove('hidden');return;}if(tk)sessionStorage.setItem('gh_token',tk);EM=true;document.getElementById('pm').classList.add('hidden');document.getElementById('eBtn').className='rbtn ea';document.getElementById('eBtn').textContent='🔓 Editing';document.getElementById('eBar').classList.remove('hidden');render();}
 function cancelEdit(){EM=false;document.getElementById('eBtn').className='rbtn';document.getElementById('eBtn').textContent='🔒 Edit';document.getElementById('eBar').classList.add('hidden');render();}
 function onEdit(dt,fld,el){const v=parseFloat(el.value);if(!isNaN(v)){const r=D.find(x=>x.date===dt);if(r){r[fld]=v;if(r.plnM3&&r.plnEur)r.plEur=r.plnM3/r.plnEur/1000;if(r.plEur!=null&&r.ltEur!=null){r.delta=r.plEur-r.ltEur;r.deltaPct=r.delta/r.ltEur;}if(r.seSek&&r.sekEur)r.seEur=r.seSek/r.sekEur;render();}}}
 function onEditDate(oldDt,el){const r=D.find(x=>x.date===oldDt);if(r){r.date=el.value;const d=new Date(el.value);r.day=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];render();}}
@@ -128,8 +129,10 @@ W=Object.values(bw).map(v=>v.r).sort((a,b)=>b.date.localeCompare(a.date));}
 
 dot.className='dot ok';st.textContent=`${D.length} daily · ${W.length} weekly`;
 ub.innerHTML=`✅ ${D.length} daily, ${W.length} weekly — ${new Date().toLocaleString('lt-LT')}`;
+try{localStorage.setItem('ft_cache',JSON.stringify({D,W,ts:Date.now()}));}catch(_){}
 render();
-}catch(e){dot.className='dot err';st.textContent='Error';ub.innerHTML=`❌ ${e.message}`;}}
+}catch(e){dot.className='dot err';st.textContent='Error (cached)';ub.innerHTML=`❌ ${e.message} — showing cached data`;
+try{const c=JSON.parse(localStorage.getItem('ft_cache')||'{}');if(c.D){D=c.D;W=c.W||[];render();const age=Math.round((Date.now()-(c.ts||0))/60000);st.textContent=`Cached (${age}m ago)`;}}catch(_){}}}
 
 function nn(v){return(v!=null&&v!==''&&!isNaN(v))?Number(v):null}
 function f(v,d=3){return v!=null?v.toFixed(d):'—'}
