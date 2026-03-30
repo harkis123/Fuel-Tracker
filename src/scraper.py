@@ -309,28 +309,31 @@ def parse_orlen_lt_pdf(pdf_bytes: bytes) -> Optional[dict[str, float]]:
 def fetch_orlen_lt() -> Optional[dict[str, float]]:
     """Fetch Orlen LT diesel price from PDF protocols."""
     try:
-        r = SESSION.get(URLS["orlen_lt_list"], timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-
+        # Step 1: Try TODAY's PDF first (constructed URL) — it may not be in archive yet
         pdf_links: list[str] = []
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            if ".pdf" in href.lower() and "kainos" in href.lower():
-                if not href.startswith("http"):
-                    href = URLS["orlen_lt_base"] + href
-                pdf_links.append(href)
+        for days_back in range(3):
+            d = TODAY - timedelta(days=days_back)
+            pdf_links.append(
+                f"{URLS['orlen_lt_base']}/LT/Wholesale/Prices/"
+                f"Kainos {d.strftime('%Y %m %d')} realizacija internet.pdf"
+            )
 
-        if not pdf_links:
-            logger.info("Orlen LT: no PDF links found, trying constructed URLs")
-            for days_back in range(7):
-                d = TODAY - timedelta(days=days_back)
-                pdf_links.append(
-                    f"{URLS['orlen_lt_base']}/LT/Wholesale/Prices/"
-                    f"Kainos {d.strftime('%Y %m %d')} realizacija internet.pdf"
-                )
+        # Step 2: Also get links from archive page
+        try:
+            r = SESSION.get(URLS["orlen_lt_list"], timeout=REQUEST_TIMEOUT)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if ".pdf" in href.lower() and "kainos" in href.lower():
+                    if not href.startswith("http"):
+                        href = URLS["orlen_lt_base"] + href
+                    if href not in pdf_links:
+                        pdf_links.append(href)
+        except Exception as e:
+            logger.warning("Orlen LT: archive page failed: %s", e)
 
-        for pdf_url in pdf_links[:5]:
+        for pdf_url in pdf_links[:7]:
             try:
                 filename = pdf_url.split("/")[-1]
                 logger.info("Orlen LT: trying %s", filename)
