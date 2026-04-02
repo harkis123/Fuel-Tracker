@@ -225,45 +225,55 @@ def fetch_fx() -> Optional[dict[str, float]]:
 # ═══════════════════════════════════════
 def fetch_orlen_pl() -> Optional[dict[str, float]]:
     """Scrape Orlen PL Ekodiesel wholesale price in PLN/m³."""
-    try:
-        r = SESSION.get(URLS["orlen_pl"], timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
+    import time
+    urls = [
+        URLS["orlen_pl"],  # English version
+        "https://www.petrodom.pl/oferta/aktualne-hurtowe-ceny-paliw-orlen/",  # Polish version
+    ]
+    
+    for url in urls:
+        for attempt in range(2):
+            try:
+                logger.info("Orlen PL: trying %s (attempt %d)", url.split("/")[2], attempt+1)
+                r = SESSION.get(url, timeout=30)
+                r.raise_for_status()
+                soup = BeautifulSoup(r.text, "html.parser")
 
-        # Method 1: Table parsing
-        tables = soup.find_all("table")
-        logger.info("Orlen PL: found %d tables", len(tables))
-        for table in tables:
-            for row in table.find_all("tr"):
-                cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-                for i, cell in enumerate(cells):
-                    if (
-                        "ekodiesel" in cell.lower()
-                        and "arktyczny" not in cell.lower()
-                        and "grzewczy" not in cell.lower()
-                    ):
-                        logger.debug("Orlen PL: found Ekodiesel cell: %r", cell)
-                        for j in range(i + 1, min(i + 3, len(cells))):
-                            price = clean_num(cells[j])
-                            if price and ORLEN_PL_MIN < price < ORLEN_PL_MAX:
-                                logger.info("Orlen PL: Ekodiesel = %.2f PLN/m³", price)
-                                return {"price_pln_m3": price}
+                # Method 1: Table parsing
+                for table in soup.find_all("table"):
+                    for row in table.find_all("tr"):
+                        cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+                        for i, cell in enumerate(cells):
+                            if (
+                                "ekodiesel" in cell.lower()
+                                and "arktyczny" not in cell.lower()
+                                and "grzewczy" not in cell.lower()
+                            ):
+                                for j in range(i + 1, min(i + 3, len(cells))):
+                                    price = clean_num(cells[j])
+                                    if price and ORLEN_PL_MIN < price < ORLEN_PL_MAX:
+                                        logger.info("Orlen PL: Ekodiesel = %.2f PLN/m³", price)
+                                        return {"price_pln_m3": price}
 
-        # Method 2: Text fallback
-        text = soup.get_text(" ", strip=True)
-        logger.info("Orlen PL: table parsing failed, trying text search")
-        m = re.search(r"[Ee]kodiesel[^0-9]{0,60}?(\d[\d\s\xa0]*\d)", text)
-        if m:
-            price = clean_num(m.group(1))
-            if price and ORLEN_PL_MIN < price < ORLEN_PL_MAX:
-                logger.info("Orlen PL: Ekodiesel (text fallback) = %.2f PLN/m³", price)
-                return {"price_pln_m3": price}
+                # Method 2: Text fallback
+                text = soup.get_text(" ", strip=True)
+                m = re.search(r"[Ee]kodiesel[^0-9]{0,60}?(\d[\d\s\xa0]*\d)", text)
+                if m:
+                    price = clean_num(m.group(1))
+                    if price and ORLEN_PL_MIN < price < ORLEN_PL_MAX:
+                        logger.info("Orlen PL: Ekodiesel (text) = %.2f PLN/m³", price)
+                        return {"price_pln_m3": price}
+                        
+                logger.warning("Orlen PL: page loaded but Ekodiesel not found")
+                break  # page loaded OK, no need to retry same URL
+                
+            except Exception as e:
+                logger.warning("Orlen PL: %s attempt %d: %s", url.split("/")[2], attempt+1, e)
+                if attempt == 0:
+                    time.sleep(5)
 
-        logger.warning("Orlen PL: Ekodiesel not found in tables or text")
-        return None
-    except Exception as e:
-        logger.error("Orlen PL: %s", e)
-        return None
+    logger.error("Orlen PL: all sources failed")
+    return None
 
 
 # ═══════════════════════════════════════
