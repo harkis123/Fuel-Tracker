@@ -1,5 +1,5 @@
 {
-  "date": "2026-04-06",
+  "date": "2026-04-07",
   "version": "v7",
   "sources_ok": 6,
   "sources_total": 6,
@@ -20,7 +20,7 @@
       "price_pln_m3": 6988.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.9748
+      "price_eur_l": 2.1468
     },
     "elvis_de": {
       "price_eur_l": 2.286
