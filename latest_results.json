@@ -1,32 +1,29 @@
 {
-  "date": "2026-04-09",
+  "date": "2026-04-10",
   "version": "v7",
-  "sources_ok": 6,
+  "sources_ok": 5,
   "sources_total": 6,
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
-    "elvis_de": true,
+    "elvis_de": false,
     "bsh_se": true,
     "eu_bulletin": true
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2538,
-      "SEK_EUR": 10.784
+      "PLN_EUR": 4.2558,
+      "SEK_EUR": 10.8765
     },
     "orlen_pl": {
-      "price_pln_m3": 6803.0
+      "price_pln_m3": 6810.0
     },
     "orlen_lt": {
-      "price_eur_l": 2.0917
-    },
-    "elvis_de": {
-      "price_eur_l": 2.286
+      "price_eur_l": 1.91
     },
     "bsh_se": {
-      "price_sek_l": 25.14
+      "price_sek_l": 22.44
     },
     "eu_bulletin": {
       "LT": 2.1781,
@@ -40,5 +37,7 @@
       "_date": "2026-04-06"
     }
   },
-  "failures": {}
+  "failures": {
+    "DE": "NO_DATA"
+  }
 }
