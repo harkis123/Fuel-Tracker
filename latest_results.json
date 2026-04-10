@@ -1,13 +1,13 @@
 {
   "date": "2026-04-10",
   "version": "v7",
-  "sources_ok": 5,
+  "sources_ok": 6,
   "sources_total": 6,
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
-    "elvis_de": false,
+    "elvis_de": true,
     "bsh_se": true,
     "eu_bulletin": true
   },
@@ -21,6 +21,9 @@
     },
     "orlen_lt": {
       "price_eur_l": 1.91
+    },
+    "elvis_de": {
+      "price_eur_l": 2.434
     },
     "bsh_se": {
       "price_sek_l": 22.44
@@ -37,7 +40,5 @@
       "_date": "2026-04-06"
     }
   },
-  "failures": {
-    "DE": "NO_DATA"
-  }
+  "failures": {}
 }
