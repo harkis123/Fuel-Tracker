@@ -1,5 +1,5 @@
 {
-  "date": "2026-04-15",
+  "date": "2026-04-16",
   "version": "v7",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,31 +13,31 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2425,
-      "SEK_EUR": 10.798
+      "PLN_EUR": 4.2413,
+      "SEK_EUR": 10.85
     },
     "orlen_pl": {
-      "price_pln_m3": 6398.0
+      "price_pln_m3": 6346.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.9376
+      "price_eur_l": 1.8536
     },
     "elvis_de": {
       "price_eur_l": 2.434
     },
     "bsh_se": {
-      "price_sek_l": 23.39
+      "price_sek_l": 21.74
     },
     "eu_bulletin": {
-      "LT": 2.1781,
-      "LV": 2.056,
-      "EE": 2.034,
-      "DK": 2.5591,
-      "SE": 2.1995,
-      "FI": 2.2579,
-      "EU_AVG": 2.1146,
-      "DE": 2.434,
-      "_date": "2026-04-06"
+      "LT": 2.1504,
+      "LV": 2.124,
+      "EE": 2.058,
+      "DK": 2.3419,
+      "SE": 2.1294,
+      "FI": 2.3041,
+      "EU_AVG": 2.0997,
+      "DE": 2.275,
+      "_date": "2026-04-13"
     }
   },
   "failures": {}
