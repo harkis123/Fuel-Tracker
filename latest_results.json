@@ -1,5 +1,5 @@
 {
-  "date": "2026-04-17",
+  "date": "2026-04-20",
   "version": "v7",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,14 +13,14 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2423,
-      "SEK_EUR": 10.804
+      "PLN_EUR": 4.2328,
+      "SEK_EUR": 10.803
     },
     "orlen_pl": {
-      "price_pln_m3": 6247.0
+      "price_pln_m3": 6104.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.8038
+      "price_eur_l": 1.7933
     },
     "elvis_de": {
       "price_eur_l": 2.275
