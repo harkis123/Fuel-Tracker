@@ -5,16 +5,19 @@
   "sources_total": 6,
   "results": {
     "fx": true,
-    "orlen_pl": false,
+    "orlen_pl": true,
     "orlen_lt": true,
     "elvis_de": true,
-    "bsh_se": true,
+    "bsh_se": false,
     "eu_bulletin": true
   },
   "data": {
     "fx": {
       "PLN_EUR": 4.2295,
       "SEK_EUR": 10.7495
+    },
+    "orlen_pl": {
+      "price_pln_m3": 5916.0
     },
     "orlen_lt": {
       "price_eur_l": 1.6875,
@@ -24,9 +27,6 @@
     },
     "elvis_de": {
       "price_eur_l": 2.275
-    },
-    "bsh_se": {
-      "price_sek_l": 20.84
     },
     "eu_bulletin": {
       "LT": 2.1504,
@@ -41,7 +41,7 @@
     }
   },
   "failures": {
-    "PL": "NO_DATA"
+    "SE": "NO_DATA"
   },
   "diesel_class": "fallback"
 }
