@@ -1,14 +1,14 @@
 {
   "date": "2026-04-22",
   "version": "v6.1",
-  "sources_ok": 5,
+  "sources_ok": 6,
   "sources_total": 6,
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
     "elvis_de": true,
-    "bsh_se": false,
+    "bsh_se": true,
     "eu_bulletin": true
   },
   "data": {
@@ -28,6 +28,9 @@
     "elvis_de": {
       "price_eur_l": 2.275
     },
+    "bsh_se": {
+      "price_sek_l": 20.84
+    },
     "eu_bulletin": {
       "LT": 2.1504,
       "LV": 2.124,
@@ -40,8 +43,6 @@
       "_date": "2026-04-13"
     }
   },
-  "failures": {
-    "SE": "NO_DATA"
-  },
+  "failures": {},
   "diesel_class": "fallback"
 }
