@@ -89,38 +89,49 @@ def fetch_fx():
 # 2. ORLEN PL — via petrodom.pl
 # ═══════════════════════════════════════
 def fetch_orlen_pl():
-    try:
-        url = "https://www.petrodom.pl/en/current-wholesale-fuel-prices-provided-by-pkn-orlen/"
-        r = requests.get(url, headers=H, timeout=20)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        tables = soup.find_all("table")
-        log("Orlen PL", f"Found {len(tables)} tables")
-        for table in tables:
-            for row in table.find_all("tr"):
-                cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
-                for i, cell in enumerate(cells):
-                    if "ekodiesel" in cell.lower() and "arktyczny" not in cell.lower() and "grzewczy" not in cell.lower():
-                        log("Orlen PL", f"Found Ekodiesel cell: {repr(cell)}")
-                        for j in range(i+1, min(i+3, len(cells))):
-                            raw = cells[j]
-                            log("Orlen PL", f"  Price cell: {repr(raw)}")
-                            price = clean_num(raw)
-                            if price and 3000 < price < 10000:
-                                log("Orlen PL", f"Ekodiesel = {price} PLN/m³")
-                                return {"price_pln_m3": price}
-        text = soup.get_text(" ", strip=True)
-        log("Orlen PL", f"Table parsing failed, trying text search...")
-        m = re.search(r'[Ee]kodiesel[^0-9]{0,60}?(\d[\d\s\xa0]*\d)', text)
-        if m:
-            price = clean_num(m.group(1))
-            if price and 3000 < price < 10000:
-                log("Orlen PL", f"Ekodiesel (text fallback) = {price} PLN/m³")
-                return {"price_pln_m3": price}
-        log("Orlen PL", "Not found in tables or text", "WARN")
-        return None
-    except Exception as e:
-        log("Orlen PL", str(e), "ERROR"); return None
+    import time
+    # 🔧 PATCHED v6.1: Try both EN and PL URLs with retry
+    urls = [
+        "https://www.petrodom.pl/en/current-wholesale-fuel-prices-provided-by-pkn-orlen/",
+        "https://www.petrodom.pl/oferta/aktualne-hurtowe-ceny-paliw-orlen/",
+    ]
+    for attempt, url in enumerate(urls):
+        try:
+            log("Orlen PL", f"Trying URL {attempt+1}/{len(urls)}: {url.split('.pl/')[-1][:50]}")
+            r = requests.get(url, headers=H, timeout=20)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            tables = soup.find_all("table")
+            log("Orlen PL", f"Found {len(tables)} tables")
+            for table in tables:
+                for row in table.find_all("tr"):
+                    cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
+                    for i, cell in enumerate(cells):
+                        if "ekodiesel" in cell.lower() and "arktyczny" not in cell.lower() and "grzewczy" not in cell.lower():
+                            log("Orlen PL", f"Found Ekodiesel cell: {repr(cell)}")
+                            for j in range(i+1, min(i+3, len(cells))):
+                                raw = cells[j]
+                                log("Orlen PL", f"  Price cell: {repr(raw)}")
+                                price = clean_num(raw)
+                                if price and 3000 < price < 10000:
+                                    log("Orlen PL", f"Ekodiesel = {price} PLN/m³")
+                                    return {"price_pln_m3": price}
+            text = soup.get_text(" ", strip=True)
+            log("Orlen PL", f"Table parsing failed on URL {attempt+1}, trying text search...")
+            m = re.search(r'[Ee]kodiesel[^0-9]{0,60}?(\d[\d\s\xa0]*\d)', text)
+            if m:
+                price = clean_num(m.group(1))
+                if price and 3000 < price < 10000:
+                    log("Orlen PL", f"Ekodiesel (text fallback) = {price} PLN/m³")
+                    return {"price_pln_m3": price}
+            log("Orlen PL", f"URL {attempt+1} — Ekodiesel not found, trying next...", "WARN")
+            time.sleep(2)
+        except Exception as e:
+            log("Orlen PL", f"URL {attempt+1} error: {e}", "WARN")
+            time.sleep(2)
+            continue
+    log("Orlen PL", "All URLs failed", "ERROR")
+    return None
 
 
 # ═══════════════════════════════════════
