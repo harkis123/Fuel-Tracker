@@ -574,7 +574,10 @@ def update_excel(fx=None, orlen_pl=None, orlen_lt=None, elvis_de=None, bsh_se=No
         wc(2, calendar.day_abbr[WDAY], font=Font(name="Aptos",size=9,color="6B7280"))
         wc(3, orlen_pl["price_pln_m3"] if orlen_pl else None, '#,##0.00', ifont, ifill)
         wc(4, fx["PLN_EUR"] if fx else None, '0.0000', ifont, ifill)
-        pl_eur_l = round(orlen_pl["price_pln_m3"] / fx["PLN_EUR"] / 1000, 4) if (orlen_pl and fx and fx.get("PLN_EUR")) else None
+        # 🔧 PATCHED v6.1: Add Polish VAT (23%) for fair comparison with LT (which includes 21% PVM)
+        # Petrodom.pl prices are NETTO (be PVM), Orlen LT prices are BRUTTO (su PVM)
+        PL_PVM = 1.23
+        pl_eur_l = round(orlen_pl["price_pln_m3"] * PL_PVM / fx["PLN_EUR"] / 1000, 4) if (orlen_pl and fx and fx.get("PLN_EUR")) else None
         wc(5, pl_eur_l, '0.000')
         lt_val = orlen_lt["price_eur_l"] if orlen_lt else None
         wc(6, lt_val, '0.000', ifont, ifill)
