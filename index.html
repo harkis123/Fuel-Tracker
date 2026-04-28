@@ -155,7 +155,7 @@ const vatLbl=sv?'su PVM':'be PVM';
 const ks=[{l:'ORLEN LT',v:f(ltV),tr:pc(ltV,ltVP),s:`EUR/l ${vatLbl}`,c:'var(--cyan)',i:'🇱🇹'},{l:'ORLEN PL → EUR',v:f(plV),tr:pc(plV,plVP),s:`EUR/l ${vatLbl}`,c:'var(--orange)',i:'🇵🇱'},{l:'Δ PL vs LT',v:pdV!=null?(pdV>0?'+':'')+pdV.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},{l:'ELVIS DE',v:f(deV),tr:pc(deV,deVP),s:`EUR/l ${vatLbl}`,c:'var(--purple)',i:'🇩🇪'},{l:'BSH/ST1 SE',v:f(seV),tr:pc(seV,seVP),s:`EUR/l ${vatLbl}`,c:'var(--teal)',i:'🇸🇪'}];
 // MECFS calculation: base 4694 PLN/1000L, step 78 PLN = +0.5%
 const MECFS_BASE=4694,MECFS_STEP=78,MECFS_MAX_PCT=15;
-function calcMecfs(plnM3){if(!plnM3)return null;const steps=Math.floor((plnM3-MECFS_BASE)/MECFS_STEP);return Math.max(0,Math.min(steps*0.5,MECFS_MAX_PCT));}
+function calcMecfs(plnM3){if(!plnM3||plnM3<=MECFS_BASE)return 0;const steps=Math.ceil((plnM3-MECFS_BASE)/MECFS_STEP);return Math.min(steps*0.5,MECFS_MAX_PCT);}
 // Weekly avg: 7 CALENDAR days ending on refDate (inclusive)
 function weekAvgPlnM3ByDate(refDate){
   const end=new Date(refDate+'T23:59:59');
