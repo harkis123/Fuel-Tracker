@@ -76,8 +76,20 @@ let D=[],W=[],EM=false;
 // ═══ MECFS Configuration ═══
 // Mode: 'PL' = pagal Orlen PL (PLN/1000L), 'LT' = pagal Orlen LT (EUR/l su PVM)
 let MECFS_MODE = localStorage.getItem('mecfs_mode') || 'PL';
-// LT MECFS lookup table: [price EUR/l su PVM, surcharge %]
-// Pasiekus aukštesnę ribą — taikomas aukštesnis mokestis
+
+// PL MECFS lookup table: [price PLN/1000L (be PVM), surcharge %]
+// Source: Orlen PL Hurtowe ceny paliw
+const MECFS_PL_TABLE = [
+  [4694,0.0],[4772,0.5],[4850,1.0],[4928,1.5],[5007,2.0],[5085,2.5],
+  [5164,3.0],[5242,3.5],[5320,4.0],[5398,4.5],[5476,5.0],[5554,5.5],
+  [5633,6.0],[5711,6.5],[5789,7.0],[5867,7.5],[5945,8.0],[6024,8.5],
+  [6102,9.0],[6181,9.5],[6259,10.0],[6337,10.5],[6415,11.0],[6493,11.5],
+  [6571,12.0],[6650,12.5],[6728,13.0],[6806,13.5],[6884,14.0],[6962,14.5],
+  [7041,15.0]
+];
+
+// LT MECFS lookup table: [price EUR/l (su PVM), surcharge %]
+// Source: Orlen LT pardavimo kaina su PVM
 const MECFS_LT_TABLE = [
   [1.50,0.0],[1.53,0.5],[1.55,1.0],[1.58,1.5],[1.60,2.0],[1.63,2.5],
   [1.65,3.0],[1.68,3.5],[1.70,4.0],[1.73,4.5],[1.75,5.0],[1.78,5.5],
@@ -158,37 +170,31 @@ function pc(a,b){return(a&&b&&b!==0)?((a-b)/b)*100:null}
 // ═══════════════════════════════════════
 // MECFS Calculation (PL & LT)
 // ═══════════════════════════════════════
-const MECFS_PL_BASE=4694, MECFS_PL_STEP=78, MECFS_MAX_PCT=15;
+const MECFS_MAX_PCT=15;
 
-// PL: Orlen PL PLN/1000L (be PVM) — apvalinama AUKŠTYN (aukštesnė riba)
-function calcMecfsPL(plnM3){
-  if(!plnM3||plnM3<=MECFS_PL_BASE)return 0;
-  const steps=Math.ceil((plnM3-MECFS_PL_BASE)/MECFS_PL_STEP);
-  return Math.min(steps*0.5,MECFS_MAX_PCT);
-}
-
-// LT: Orlen LT EUR/l su PVM — lookup pagal lentelę, aukštesnė riba
-function calcMecfsLT(eurL){
-  if(!eurL||eurL<=MECFS_LT_TABLE[0][0])return 0;
-  // Find which bracket the price falls into
-  // Take HIGHER bracket if price exceeds a threshold
-  for(let i=MECFS_LT_TABLE.length-1;i>=0;i--){
-    if(eurL>=MECFS_LT_TABLE[i][0]){
-      // Price >= this row's threshold → take next row's % (higher bracket)
-      // Unless we're at the last row
-      if(i===MECFS_LT_TABLE.length-1)return MECFS_LT_TABLE[i][1];
-      // If price is exactly at threshold, stay at this bracket; if above, go up
-      return eurL>MECFS_LT_TABLE[i][0]&&i+1<MECFS_LT_TABLE.length
-        ? Math.min(MECFS_LT_TABLE[i+1][1],MECFS_MAX_PCT)
-        : MECFS_LT_TABLE[i][1];
+// Universal lookup function:
+// - kaina < bazės         → 0%
+// - kaina = slenkstis     → grąžina TO slenksčio % (pvz. 6102 → 9.0%)
+// - kaina > slenkstis     → grąžina SEKANČIO slenksčio % (aukštesnė riba)
+//                            pvz. 6154 (virš 6102) → 9.5%
+// - kaina > paskutinio    → grąžina max (15%)
+function lookupSurcharge(price, table){
+  if(!price||price<table[0][0])return 0;
+  let s=0;
+  for(let i=0;i<table.length;i++){
+    if(price===table[i][0])return table[i][1];
+    if(price>table[i][0]){
+      s = (i+1<table.length) ? table[i+1][1] : table[i][1];
+    } else {
+      break;
     }
   }
-  return 0;
+  return Math.min(s,MECFS_MAX_PCT);
 }
 
-function calcMecfs(value){
-  return MECFS_MODE==='LT'?calcMecfsLT(value):calcMecfsPL(value);
-}
+function calcMecfsPL(plnM3){return lookupSurcharge(plnM3, MECFS_PL_TABLE);}
+function calcMecfsLT(eurL){return lookupSurcharge(eurL, MECFS_LT_TABLE);}
+function calcMecfs(value){return MECFS_MODE==='LT'?calcMecfsLT(value):calcMecfsPL(value);}
 
 // 7-day rolling averages
 function weekAvgPlnM3ByDate(refDate){
@@ -198,15 +204,16 @@ function weekAvgPlnM3ByDate(refDate){
   const vals=D.filter(r=>r.date>=startStr&&r.date<=refDate&&r.plnM3!=null).map(r=>r.plnM3);
   return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
 }
-function weekAvgLtEurByDate(refDate){
-  const end=new Date(refDate+'T23:59:59');
-  const start=new Date(end);start.setDate(start.getDate()-6);
-  const startStr=start.toISOString().split('T')[0];
-  const vals=D.filter(r=>r.date>=startStr&&r.date<=refDate&&r.ltEur!=null).map(r=>r.ltEur);
-  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+// LT MECFS naudoja EU Weekly Oil Bulletin LT kainą (su PVM)
+// Grąžina paskutinę turimą EU Bulletin LT kainą (jau yra savaitės vidurkis iš EC)
+function latestEuBulletinLT(){
+  for(const r of W){if(r.LT!=null)return{value:r.LT,date:r.date};}
+  return null;
 }
-function weekAvgForMode(refDate){
-  return MECFS_MODE==='LT'?weekAvgLtEurByDate(refDate):weekAvgPlnM3ByDate(refDate);
+function previousEuBulletinLT(){
+  let count=0;
+  for(const r of W){if(r.LT!=null){count++;if(count===2)return{value:r.LT,date:r.date};}}
+  return null;
 }
 
 function render(){
@@ -230,14 +237,36 @@ const ks=[
 ];
 
 // ═══ MECFS calculation ═══
-const refDate=D[0]?.date;
-const weekAvg=refDate?weekAvgForMode(refDate):null;
-const mecfs=calcMecfs(weekAvg);
+let mecfsValue=null, prevMecfsValue=null, mecfsRefDate=null, mecfsRangeLabel='';
 
-// Previous week (7 days before latest)
-const prevRefDate=refDate?(()=>{const d=new Date(refDate);d.setDate(d.getDate()-7);return d.toISOString().split('T')[0];})():null;
-const prevWeekAvg=prevRefDate?weekAvgForMode(prevRefDate):null;
-const prevMecfs=calcMecfs(prevWeekAvg);
+if(MECFS_MODE==='LT'){
+  // LT: use EU Weekly Oil Bulletin LT price (already a weekly average from EC)
+  const cur=latestEuBulletinLT();
+  const prev=previousEuBulletinLT();
+  if(cur){
+    mecfsValue=cur.value;
+    mecfsRefDate=cur.date;
+    // EU Bulletin reports weekly prices — single weekly value
+    const d=new Date(cur.date);
+    const wEnd=new Date(d);wEnd.setDate(d.getDate()+6);
+    mecfsRangeLabel=`${cur.date} sav.`;
+  }
+  if(prev)prevMecfsValue=prev.value;
+} else {
+  // PL: use 7-day rolling avg of Orlen PL daily prices
+  const refDate=D[0]?.date;
+  if(refDate){
+    mecfsValue=weekAvgPlnM3ByDate(refDate);
+    mecfsRefDate=refDate;
+    const wStart=new Date(refDate);wStart.setDate(wStart.getDate()-6);
+    mecfsRangeLabel=`${wStart.toISOString().split('T')[0]} – ${refDate}`;
+  }
+  const prevRefDate=refDate?(()=>{const d=new Date(refDate);d.setDate(d.getDate()-7);return d.toISOString().split('T')[0];})():null;
+  if(prevRefDate)prevMecfsValue=weekAvgPlnM3ByDate(prevRefDate);
+}
+
+const mecfs=calcMecfs(mecfsValue);
+const prevMecfs=calcMecfs(prevMecfsValue);
 
 const mecfsColor=mecfs==null?'var(--t4)':mecfs===0?'var(--green)':mecfs<=3?'var(--amber)':mecfs<=7?'var(--orange)':'var(--red)';
 
@@ -248,31 +277,35 @@ document.getElementById('kpi').innerHTML=ks.map(k=>{
   return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;
 }).join('')+(()=>{
   // History sparkline — uses currently selected mode
-  const mecfsHist=D.slice(0,30).map((r)=>{
-    const avg=weekAvgForMode(r.date);
-    if(avg==null)return null;
-    const v=calcMecfs(avg);
-    const unit=MECFS_MODE==='LT'?'EUR/l':'PLN';
-    const avgFmt=MECFS_MODE==='LT'?avg.toFixed(3):avg.toFixed(0);
-    return{date:r.date,v,avg,label:`${r.date}: ${v.toFixed(1)}% (avg ${avgFmt} ${unit})`};
-  }).filter(r=>r!=null).reverse();
+  let mecfsHist=[];
+  if(MECFS_MODE==='LT'){
+    // Use all available EU Bulletin LT entries
+    mecfsHist=W.filter(r=>r.LT!=null).slice(0,30).map(r=>{
+      const v=calcMecfsLT(r.LT);
+      return{date:r.date,v,avg:r.LT,label:`${r.date}: ${v.toFixed(1)}% (LT bulletin: ${r.LT.toFixed(3)} EUR/l)`};
+    }).reverse();
+  } else {
+    // 7-day rolling avg per day
+    mecfsHist=D.slice(0,30).map(r=>{
+      const avg=weekAvgPlnM3ByDate(r.date);
+      if(avg==null)return null;
+      const v=calcMecfsPL(avg);
+      return{date:r.date,v,avg,label:`${r.date}: ${v.toFixed(1)}% (avg ${avg.toFixed(0)} PLN)`};
+    }).filter(r=>r!=null).reverse();
+  }
   
   const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>({v:r.v,label:r.label})),mecfsColor,340,36):'';
   const mDelta=mecfs!=null&&prevMecfs!=null?mecfs-prevMecfs:null;
   const mTrHtml=mDelta!=null&&mDelta!==0?`<span class="kpi-tr ${mDelta>0?'up':'dn'}">${mDelta>0?'▲':'▼'} ${Math.abs(mDelta).toFixed(1)}pp</span>`:'';
   
-  const weekEnd=refDate||'';
-  const weekStartDate=refDate?(()=>{const d=new Date(refDate);d.setDate(d.getDate()-6);return d.toISOString().split('T')[0];})():'';
-  const weekRange=weekStartDate&&weekEnd?`${weekStartDate} – ${weekEnd}`:'';
-  
   // Mode-specific labels
   const weekLabel=MECFS_MODE==='LT'
-    ? (weekAvg?`7d avg: ${weekAvg.toFixed(3)} EUR/l (Orlen LT, su PVM)`:'')
-    : (weekAvg?`7d avg: ${weekAvg.toFixed(0)} PLN/1000L (Orlen PL)`:'');
+    ? (mecfsValue!=null?`EU Bulletin LT: ${mecfsValue.toFixed(3)} EUR/l (su PVM)`:'(EU Bulletin LT duomenų nėra)')
+    : (mecfsValue!=null?`7d avg: ${mecfsValue.toFixed(0)} PLN/1000L (Orlen PL)`:'(Orlen PL duomenų nėra)');
   
   const baseInfo=MECFS_MODE==='LT'
-    ? `Bazė: 1.50 EUR/l · žingsnis: ~0.025 EUR/l = +0.5% · max: ${MECFS_MAX_PCT}%`
-    : `Bazė: ${MECFS_PL_BASE} PLN/1000L · žingsnis: ${MECFS_PL_STEP} PLN = +0.5% · max: ${MECFS_MAX_PCT}%`;
+    ? `Bazė: ${MECFS_LT_TABLE[0][0].toFixed(2)} EUR/l · max: ${MECFS_MAX_PCT}% · ${MECFS_LT_TABLE.length} laiptelių · šaltinis: EU Oil Bulletin`
+    : `Bazė: ${MECFS_PL_TABLE[0][0]} PLN/1000L · max: ${MECFS_MAX_PCT}% · ${MECFS_PL_TABLE.length} laiptelių · šaltinis: Orlen PL`;
   
   // PL/LT toggle
   const toggle=`<div class="mecfs-tog" onclick="event.stopPropagation()">
@@ -286,13 +319,13 @@ document.getElementById('kpi').innerHTML=ks.map(k=>{
     <div class="kpi-ac" style="background:${mecfsColor}"></div>
     <div class="kpi-ico">${flagIcon}</div>
     <div class="kpi-lbl" style="display:flex;align-items:center;justify-content:space-between;padding-right:12px">
-      <span>Middle East Crisis Fuel Surcharge (MECFS) — ${MECFS_MODE==='LT'?'pagal Orlen LT':'pagal Orlen PL'}</span>
+      <span>Middle East Crisis Fuel Surcharge (MECFS) — ${MECFS_MODE==='LT'?'pagal EU Bulletin LT':'pagal Orlen PL'}</span>
       ${toggle}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding-left:12px;padding-right:8px">
       <div style="display:flex;align-items:baseline;gap:10px">
         <div class="kpi-val" style="color:${mecfsColor}">${mecfs!=null?mecfs.toFixed(1)+'%':'—'}</div>
-        <div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${weekRange}</span></div>
+        <div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${mecfsRangeLabel}</span></div>
         ${mTrHtml}
       </div>
       <div style="opacity:.85">${histSpk}</div>
