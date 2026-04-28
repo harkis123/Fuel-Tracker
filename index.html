@@ -50,6 +50,11 @@
 .nav-b{padding:4px 8px;font-size:9px}
 .kpi-val{font-size:20px}
 }.nm{font-family:var(--M);text-align:right!important}.ps{color:var(--red)!important}.ng{color:var(--green)!important}.bd{font-weight:700;color:var(--t1)!important}.sg{display:grid;gap:12px}.sc{background:var(--bg2);border-radius:13px;padding:18px 22px;border:1px solid var(--brd);border-left-width:3px;transition:.2s}.sc:hover{border-color:var(--brd2)}.sc-n{font-weight:800;font-size:13px}.sc-u{font-family:var(--M);font-size:10px;color:var(--t4);margin-top:3px}.sc-bg{padding:2px 9px;border-radius:20px;font-size:9px;font-weight:700}.sc-nt{font-size:11px;color:var(--t3);line-height:1.7;margin-top:10px}.ib{background:linear-gradient(135deg,var(--bg2),#0f1729);border-radius:13px;padding:24px;border:1px solid var(--brd2);margin-top:12px}.ib h4{font-size:15px;font-weight:800;margin-bottom:14px}.ib p{font-size:11px;color:var(--t3);line-height:1.8;margin-bottom:10px}.ib strong{color:var(--blue)}.emp{padding:40px;text-align:center;color:var(--t5);font-size:13px}.stt{font-size:16px;font-weight:800;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}.stt .c{font-size:12px;font-weight:400;color:var(--t4)}.hidden{display:none!important}.ub{background:var(--bg4);padding:7px 28px;font-size:10px;color:var(--t5);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--brd)}@keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.ei{background:var(--bg1);border:1px solid var(--blue);color:var(--t1);padding:4px 8px;border-radius:4px;font-family:var(--M);font-size:11px;width:80px;text-align:right}.ei:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(6,182,212,.2)}.eb{background:linear-gradient(135deg,#1a1a2e,#16213e);padding:10px 28px;font-size:11px;color:var(--amber);display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--amber)}.eb button{padding:4px 14px;border-radius:6px;border:none;cursor:pointer;font-weight:700;font-size:11px;font-family:var(--F)}.sb{background:var(--green);color:#fff}.cb{background:var(--bg4);color:var(--t3)}.mo{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:center;justify-content:center}.md{background:var(--bg2);border:1px solid var(--brd2);border-radius:14px;padding:28px;max-width:360px;width:100%}.md h3{font-size:16px;font-weight:800;margin-bottom:16px}.md input{width:100%;padding:10px 14px;background:var(--bg1);border:1px solid var(--brd);border-radius:8px;color:var(--t1);font-size:14px;margin-bottom:12px}.md input:focus{outline:none;border-color:var(--blue)}.md .mb{width:100%;padding:10px;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--F);background:linear-gradient(135deg,var(--blue),#2563eb);color:#fff}.md .me{color:var(--red);font-size:11px;margin-bottom:8px}
+/* MECFS PL/LT toggle */
+.mecfs-tog{display:inline-flex;background:var(--bg4);border:1px solid var(--brd2);border-radius:20px;padding:2px;gap:2px;cursor:pointer}
+.mecfs-tog span{padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;color:var(--t5)}
+.mecfs-tog span.act-pl{background:var(--orange);color:#fff;box-shadow:0 1px 4px rgba(249,115,22,.4)}
+.mecfs-tog span.act-lt{background:var(--cyan);color:#fff;box-shadow:0 1px 4px rgba(6,182,212,.4)}
 </style>
 </head>
 <body>
@@ -68,14 +73,27 @@
 const REPO="harkis123/Fuel-Tracker",FILE="fuel_tracker.xlsx";
 const URL_=()=>`https://raw.githubusercontent.com/${REPO}/main/${FILE}?t=${Date.now()}`;
 let D=[],W=[],EM=false;
-// VAT rates per country (as multiplier divisor, e.g. 1.21 for 21%)
+// ═══ MECFS Configuration ═══
+// Mode: 'PL' = pagal Orlen PL (PLN/1000L), 'LT' = pagal Orlen LT (EUR/l su PVM)
+let MECFS_MODE = localStorage.getItem('mecfs_mode') || 'PL';
+// LT MECFS lookup table: [price EUR/l su PVM, surcharge %]
+// Pasiekus aukštesnę ribą — taikomas aukštesnis mokestis
+const MECFS_LT_TABLE = [
+  [1.50,0.0],[1.53,0.5],[1.55,1.0],[1.58,1.5],[1.60,2.0],[1.63,2.5],
+  [1.65,3.0],[1.68,3.5],[1.70,4.0],[1.73,4.5],[1.75,5.0],[1.78,5.5],
+  [1.80,6.0],[1.83,6.5],[1.85,7.0],[1.88,7.5],[1.90,8.0],[1.93,8.5],
+  [1.95,9.0],[1.98,9.5],[2.00,10.0],[2.03,10.5],[2.05,11.0],[2.08,11.5],
+  [2.10,12.0],[2.13,12.5],[2.15,13.0],[2.18,13.5],[2.20,14.0],[2.23,14.5],
+  [2.25,15.0]
+];
+// VAT rates per country
 const VAT={LT:1.21,PL:1.23,DE:1.19,SE:1.25,LV:1.21,EE:1.24,DK:1.25,FI:1.255,EU:1.0};
-// Per-tab VAT toggle state (true = su PVM, false = be PVM)
 const SHOW_VAT={dash:true,daily:true,weekly:true};
 function exVat(v,rate){return v!=null?v/rate:null;}
 function applyVat(v,rate,showVat){return showVat?v:exVat(v,rate);}
 function vatToggleHtml(tab){const on=SHOW_VAT[tab];return`<div style="display:flex;align-items:center;gap:6px;font-size:10px"><span style="color:var(--t5)">Kaina:</span><button onclick="toggleVat('${tab}')" style="display:flex;background:var(--bg4);border:1px solid var(--brd2);border-radius:20px;padding:2px;cursor:pointer;gap:2px"><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${on?'background:var(--bg2);color:var(--t1);box-shadow:0 1px 4px rgba(0,0,0,.4)':'color:var(--t5)'}">su PVM</span><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${!on?'background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(59,130,246,.4)':'color:var(--t5)'}">be PVM</span></button></div>`;}
 function toggleVat(tab){SHOW_VAT[tab]=!SHOW_VAT[tab];render();}
+function setMecfsMode(m){MECFS_MODE=m;localStorage.setItem('mecfs_mode',m);render();}
 
 document.querySelectorAll('.nav-b').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav-b').forEach(x=>x.classList.remove('on'));b.classList.add('on');['dash','daily','weekly','src'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hidden',t!==b.dataset.t));}));
 
@@ -113,7 +131,6 @@ for(let i=hi+1;i<raw.length;i++){const r=raw[i];if(!r||!r[0])continue;
 const dt=r[0] instanceof Date?r[0].toISOString().split('T')[0]:String(r[0]).substring(0,10);
 if(!dt||dt.length<8)continue;
 all.push({date:dt,day:r[1]||'',plnM3:nn(r[2]),plnEur:nn(r[3]),plEur:nn(r[4]),ltEur:nn(r[5]),delta:nn(r[6]),deltaPct:nn(r[7]),deEur:nn(r[8]),seSek:nn(r[9]),sekEur:nn(r[10]),seEur:nn(r[11]),notes:r[12]||''});}
-// DEDUP: keep row with most data per date
 const bd={};all.forEach(r=>{const c=[r.ltEur,r.plEur,r.deEur,r.seEur,r.plnM3].filter(v=>v!=null).length;if(!bd[r.date]||c>bd[r.date].c)bd[r.date]={r,c};});
 D=Object.values(bd).map(v=>v.r).sort((a,b)=>b.date.localeCompare(a.date));}
 
@@ -138,12 +155,64 @@ function nn(v){return(v!=null&&v!==''&&!isNaN(v))?Number(v):null}
 function f(v,d=3){return v!=null?v.toFixed(d):'—'}
 function pc(a,b){return(a&&b&&b!==0)?((a-b)/b)*100:null}
 
+// ═══════════════════════════════════════
+// MECFS Calculation (PL & LT)
+// ═══════════════════════════════════════
+const MECFS_PL_BASE=4694, MECFS_PL_STEP=78, MECFS_MAX_PCT=15;
+
+// PL: Orlen PL PLN/1000L (be PVM) — apvalinama AUKŠTYN (aukštesnė riba)
+function calcMecfsPL(plnM3){
+  if(!plnM3||plnM3<=MECFS_PL_BASE)return 0;
+  const steps=Math.ceil((plnM3-MECFS_PL_BASE)/MECFS_PL_STEP);
+  return Math.min(steps*0.5,MECFS_MAX_PCT);
+}
+
+// LT: Orlen LT EUR/l su PVM — lookup pagal lentelę, aukštesnė riba
+function calcMecfsLT(eurL){
+  if(!eurL||eurL<=MECFS_LT_TABLE[0][0])return 0;
+  // Find which bracket the price falls into
+  // Take HIGHER bracket if price exceeds a threshold
+  for(let i=MECFS_LT_TABLE.length-1;i>=0;i--){
+    if(eurL>=MECFS_LT_TABLE[i][0]){
+      // Price >= this row's threshold → take next row's % (higher bracket)
+      // Unless we're at the last row
+      if(i===MECFS_LT_TABLE.length-1)return MECFS_LT_TABLE[i][1];
+      // If price is exactly at threshold, stay at this bracket; if above, go up
+      return eurL>MECFS_LT_TABLE[i][0]&&i+1<MECFS_LT_TABLE.length
+        ? Math.min(MECFS_LT_TABLE[i+1][1],MECFS_MAX_PCT)
+        : MECFS_LT_TABLE[i][1];
+    }
+  }
+  return 0;
+}
+
+function calcMecfs(value){
+  return MECFS_MODE==='LT'?calcMecfsLT(value):calcMecfsPL(value);
+}
+
+// 7-day rolling averages
+function weekAvgPlnM3ByDate(refDate){
+  const end=new Date(refDate+'T23:59:59');
+  const start=new Date(end);start.setDate(start.getDate()-6);
+  const startStr=start.toISOString().split('T')[0];
+  const vals=D.filter(r=>r.date>=startStr&&r.date<=refDate&&r.plnM3!=null).map(r=>r.plnM3);
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+}
+function weekAvgLtEurByDate(refDate){
+  const end=new Date(refDate+'T23:59:59');
+  const start=new Date(end);start.setDate(start.getDate()-6);
+  const startStr=start.toISOString().split('T')[0];
+  const vals=D.filter(r=>r.date>=startStr&&r.date<=refDate&&r.ltEur!=null).map(r=>r.ltEur);
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+}
+function weekAvgForMode(refDate){
+  return MECFS_MODE==='LT'?weekAvgLtEurByDate(refDate):weekAvgPlnM3ByDate(refDate);
+}
+
 function render(){
 const L=D[0]||{},P=D[1]||{},E=W[0]||{};
-// Inject VAT toggles
 ['dash','daily','weekly'].forEach(t=>{const el=document.getElementById('vat-'+t);if(el)el.innerHTML=vatToggleHtml(t);});
 
-// Dashboard: apply VAT toggle to displayed values
 const sv=SHOW_VAT.dash;
 const ltV=applyVat(L.ltEur,VAT.LT,sv), ltVP=applyVat(P.ltEur,VAT.LT,sv);
 const plV=applyVat(L.plEur,VAT.PL,sv), plVP=applyVat(P.plEur,VAT.PL,sv);
@@ -152,40 +221,88 @@ const seV=applyVat(L.seEur,VAT.SE,sv), seVP=applyVat(P.seEur,VAT.SE,sv);
 const pdV=ltV!=null&&plV!=null?plV-ltV:null;
 const vatLbl=sv?'su PVM':'be PVM';
 
-const ks=[{l:'ORLEN LT',v:f(ltV),tr:pc(ltV,ltVP),s:`EUR/l ${vatLbl}`,c:'var(--cyan)',i:'🇱🇹'},{l:'ORLEN PL → EUR',v:f(plV),tr:pc(plV,plVP),s:`EUR/l ${vatLbl}`,c:'var(--orange)',i:'🇵🇱'},{l:'Δ PL vs LT',v:pdV!=null?(pdV>0?'+':'')+pdV.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},{l:'ELVIS DE',v:f(deV),tr:pc(deV,deVP),s:`EUR/l ${vatLbl}`,c:'var(--purple)',i:'🇩🇪'},{l:'BSH/ST1 SE',v:f(seV),tr:pc(seV,seVP),s:`EUR/l ${vatLbl}`,c:'var(--teal)',i:'🇸🇪'}];
-// MECFS calculation: base 4694 PLN/1000L, step 78 PLN = +0.5%
-const MECFS_BASE=4694,MECFS_STEP=78,MECFS_MAX_PCT=15;
-function calcMecfs(plnM3){if(!plnM3||plnM3<=MECFS_BASE)return 0;const steps=Math.ceil((plnM3-MECFS_BASE)/MECFS_STEP);return Math.min(steps*0.5,MECFS_MAX_PCT);}
-// Weekly avg: 7 CALENDAR days ending on refDate (inclusive)
-function weekAvgPlnM3ByDate(refDate){
-  const end=new Date(refDate+'T23:59:59');
-  const start=new Date(end);start.setDate(start.getDate()-6);
-  const startStr=start.toISOString().split('T')[0];
-  const endStr=refDate;
-  const vals=D.filter(r=>r.date>=startStr&&r.date<=endStr&&r.plnM3!=null).map(r=>r.plnM3);
-  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
-}
-// For backward compat: fromIdx-based (uses date of D[fromIdx] as reference)
-function weekAvgPlnM3(fromIdx){const r=D[fromIdx];return r?weekAvgPlnM3ByDate(r.date):null;}
-const weekAvg=D[0]?weekAvgPlnM3ByDate(D[0].date):null;
+const ks=[
+  {l:'ORLEN LT',v:f(ltV),tr:pc(ltV,ltVP),s:`EUR/l ${vatLbl}`,c:'var(--cyan)',i:'🇱🇹'},
+  {l:'ORLEN PL → EUR',v:f(plV),tr:pc(plV,plVP),s:`EUR/l ${vatLbl}`,c:'var(--orange)',i:'🇵🇱'},
+  {l:'Δ PL vs LT',v:pdV!=null?(pdV>0?'+':'')+pdV.toFixed(3):'—',tr:null,s:L.date||'',c:'var(--amber)',i:'⇄'},
+  {l:'ELVIS DE',v:f(deV),tr:pc(deV,deVP),s:`EUR/l ${vatLbl}`,c:'var(--purple)',i:'🇩🇪'},
+  {l:'BSH/ST1 SE',v:f(seV),tr:pc(seV,seVP),s:`EUR/l ${vatLbl}`,c:'var(--teal)',i:'🇸🇪'}
+];
+
+// ═══ MECFS calculation ═══
+const refDate=D[0]?.date;
+const weekAvg=refDate?weekAvgForMode(refDate):null;
 const mecfs=calcMecfs(weekAvg);
-// Previous week: 7 calendar days ending 7 days before latest
-const prevRefDate=D[0]?(()=>{const d=new Date(D[0].date);d.setDate(d.getDate()-7);return d.toISOString().split('T')[0];})():null;
-const prevWeekAvg=prevRefDate?weekAvgPlnM3ByDate(prevRefDate):null;
-const mecfsColor=mecfs==null?'var(--t4)':mecfs===0?'var(--green)':mecfs<=3?'var(--amber)':mecfs<=7?'var(--orange)':'var(--red)';
-document.getElementById('kpi').innerHTML=ks.map(k=>{const tc=k.tr>.05?'up':k.tr<-.05?'dn':'';const ti=k.tr>.05?'▲':k.tr<-.05?'▼':'';const tv=k.tr!=null?`<span class="kpi-tr ${tc}">${ti} ${Math.abs(k.tr).toFixed(1)}%</span>`:'';return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;}).join('')+
-(()=>{
-// History: for each day i, compute 7-day rolling avg ending at that day
-const mecfsHist=D.slice(0,30).map((r,i)=>{const avg=weekAvgPlnM3(i);return avg!=null?{date:r.date,v:calcMecfs(avg),avg}:null;}).filter(r=>r!=null).reverse();
-const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>({v:r.v,label:`${r.date}: ${r.v.toFixed(1)}% (avg ${r.avg.toFixed(0)} PLN)`})),mecfsColor,340,36):'';
+
+// Previous week (7 days before latest)
+const prevRefDate=refDate?(()=>{const d=new Date(refDate);d.setDate(d.getDate()-7);return d.toISOString().split('T')[0];})():null;
+const prevWeekAvg=prevRefDate?weekAvgForMode(prevRefDate):null;
 const prevMecfs=calcMecfs(prevWeekAvg);
-const mDelta=mecfs!=null&&prevMecfs!=null?mecfs-prevMecfs:null;
-const mTrHtml=mDelta!=null&&mDelta!==0?`<span class="kpi-tr ${mDelta>0?'up':'dn'}">${mDelta>0?'▲':'▼'} ${Math.abs(mDelta).toFixed(1)}pp</span>`:'';
-const weekEnd=D[0]?.date||'';
-const weekStartDate=D[0]?(()=>{const d=new Date(D[0].date);d.setDate(d.getDate()-6);return d.toISOString().split('T')[0];})():'';
-const weekLabel=weekAvg?`7d avg: ${weekAvg.toFixed(0)} PLN/1000L`:'';
-const weekRange=weekStartDate&&weekEnd?`${weekStartDate} – ${weekEnd}`:'';
-return`<div class="kpi" style="grid-column:1/-1;animation-delay:.3s"><div class="kpi-ac" style="background:${mecfsColor}"></div><div class="kpi-ico">⚡</div><div class="kpi-lbl">Middle East Crisis Fuel Surcharge (MECFS) — savaitės vidurkis</div><div style="display:flex;align-items:center;justify-content:space-between;padding-left:12px;padding-right:8px"><div style="display:flex;align-items:baseline;gap:10px"><div class="kpi-val" style="color:${mecfsColor}">${mecfs!=null?mecfs.toFixed(1)+'%':'—'}</div><div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${weekRange}</span></div>${mTrHtml}</div><div style="opacity:.85">${histSpk}</div></div><div style="padding:8px 12px 4px"><div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t5);margin-bottom:4px"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div><div style="background:var(--bg4);border-radius:4px;height:8px;overflow:hidden;border:1px solid var(--brd2)"><div style="height:100%;width:${mecfs!=null?(mecfs/MECFS_MAX_PCT)*100:0}%;background:linear-gradient(90deg,var(--green),var(--amber),var(--orange),var(--red));border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1)"></div></div><div style="font-size:9px;color:var(--t5);margin-top:5px">Bazė: ${MECFS_BASE} PLN/1000L · žingsnis: ${MECFS_STEP} PLN = +0.5% · max: ${MECFS_MAX_PCT}% · ${mecfsHist.length} savaičių istorija</div></div></div>`;
+
+const mecfsColor=mecfs==null?'var(--t4)':mecfs===0?'var(--green)':mecfs<=3?'var(--amber)':mecfs<=7?'var(--orange)':'var(--red)';
+
+document.getElementById('kpi').innerHTML=ks.map(k=>{
+  const tc=k.tr>.05?'up':k.tr<-.05?'dn':'';
+  const ti=k.tr>.05?'▲':k.tr<-.05?'▼':'';
+  const tv=k.tr!=null?`<span class="kpi-tr ${tc}">${ti} ${Math.abs(k.tr).toFixed(1)}%</span>`:'';
+  return`<div class="kpi"><div class="kpi-ac" style="background:${k.c}"></div><div class="kpi-ico">${k.i}</div><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-ft">${tv}<span class="kpi-s">${k.s}</span></div></div>`;
+}).join('')+(()=>{
+  // History sparkline — uses currently selected mode
+  const mecfsHist=D.slice(0,30).map((r)=>{
+    const avg=weekAvgForMode(r.date);
+    if(avg==null)return null;
+    const v=calcMecfs(avg);
+    const unit=MECFS_MODE==='LT'?'EUR/l':'PLN';
+    const avgFmt=MECFS_MODE==='LT'?avg.toFixed(3):avg.toFixed(0);
+    return{date:r.date,v,avg,label:`${r.date}: ${v.toFixed(1)}% (avg ${avgFmt} ${unit})`};
+  }).filter(r=>r!=null).reverse();
+  
+  const histSpk=mecfsHist.length>=2?sk(mecfsHist.map(r=>({v:r.v,label:r.label})),mecfsColor,340,36):'';
+  const mDelta=mecfs!=null&&prevMecfs!=null?mecfs-prevMecfs:null;
+  const mTrHtml=mDelta!=null&&mDelta!==0?`<span class="kpi-tr ${mDelta>0?'up':'dn'}">${mDelta>0?'▲':'▼'} ${Math.abs(mDelta).toFixed(1)}pp</span>`:'';
+  
+  const weekEnd=refDate||'';
+  const weekStartDate=refDate?(()=>{const d=new Date(refDate);d.setDate(d.getDate()-6);return d.toISOString().split('T')[0];})():'';
+  const weekRange=weekStartDate&&weekEnd?`${weekStartDate} – ${weekEnd}`:'';
+  
+  // Mode-specific labels
+  const weekLabel=MECFS_MODE==='LT'
+    ? (weekAvg?`7d avg: ${weekAvg.toFixed(3)} EUR/l (Orlen LT, su PVM)`:'')
+    : (weekAvg?`7d avg: ${weekAvg.toFixed(0)} PLN/1000L (Orlen PL)`:'');
+  
+  const baseInfo=MECFS_MODE==='LT'
+    ? `Bazė: 1.50 EUR/l · žingsnis: ~0.025 EUR/l = +0.5% · max: ${MECFS_MAX_PCT}%`
+    : `Bazė: ${MECFS_PL_BASE} PLN/1000L · žingsnis: ${MECFS_PL_STEP} PLN = +0.5% · max: ${MECFS_MAX_PCT}%`;
+  
+  // PL/LT toggle
+  const toggle=`<div class="mecfs-tog" onclick="event.stopPropagation()">
+    <span class="${MECFS_MODE==='PL'?'act-pl':''}" onclick="setMecfsMode('PL')">🇵🇱 PL</span>
+    <span class="${MECFS_MODE==='LT'?'act-lt':''}" onclick="setMecfsMode('LT')">🇱🇹 LT</span>
+  </div>`;
+  
+  const flagIcon=MECFS_MODE==='LT'?'🇱🇹':'🇵🇱';
+  
+  return`<div class="kpi" style="grid-column:1/-1;animation-delay:.3s">
+    <div class="kpi-ac" style="background:${mecfsColor}"></div>
+    <div class="kpi-ico">${flagIcon}</div>
+    <div class="kpi-lbl" style="display:flex;align-items:center;justify-content:space-between;padding-right:12px">
+      <span>Middle East Crisis Fuel Surcharge (MECFS) — ${MECFS_MODE==='LT'?'pagal Orlen LT':'pagal Orlen PL'}</span>
+      ${toggle}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-left:12px;padding-right:8px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <div class="kpi-val" style="color:${mecfsColor}">${mecfs!=null?mecfs.toFixed(1)+'%':'—'}</div>
+        <div style="font-family:var(--M);font-size:11px;color:var(--t4);line-height:1.5">${weekLabel}<br><span style="font-size:9px;color:var(--t5)">${weekRange}</span></div>
+        ${mTrHtml}
+      </div>
+      <div style="opacity:.85">${histSpk}</div>
+    </div>
+    <div style="padding:8px 12px 4px">
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t5);margin-bottom:4px"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div>
+      <div style="background:var(--bg4);border-radius:4px;height:8px;overflow:hidden;border:1px solid var(--brd2)"><div style="height:100%;width:${mecfs!=null?(mecfs/MECFS_MAX_PCT)*100:0}%;background:linear-gradient(90deg,var(--green),var(--amber),var(--orange),var(--red));border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1)"></div></div>
+      <div style="font-size:9px;color:var(--t5);margin-top:5px">${baseInfo} · ${mecfsHist.length} dienų istorija</div>
+    </div>
+  </div>`;
 })();
 
 const sp=[{l:'Orlen LT',k:'ltEur',vr:VAT.LT,h:'#06b6d4'},{l:'Orlen PL (EUR)',k:'plEur',vr:VAT.PL,h:'#f97316'},{l:'Elvis DE',k:'deEur',vr:VAT.DE,h:'#a855f7'},{l:'BSH SE (EUR)',k:'seEur',vr:VAT.SE,h:'#2dd4bf'}];
@@ -199,7 +316,7 @@ const cc=['LT','LV','EE','DK','SE','FI'],bc=['#f97316','#06b6d4','#a855f7','#2dd
 const evRaw=cc.map(c=>E[c]||0);
 const evShow=evRaw.map((v,i)=>v>0?applyVat(v,VAT[cc[i]]||1,sv):0);
 const mx=Math.max(...evShow,.001);
-const euAvgShow=E.EU?applyVat(E.EU,1,sv):null; // EU avg shown as-is (mixed countries)
+const euAvgShow=E.EU?applyVat(E.EU,1,sv):null;
 document.getElementById('eul').textContent=E.date?`${E.date}${euAvgShow?' | EU avg: '+euAvgShow.toFixed(3)+'€/l':''}  [${vatLbl}]`:W.length===0?'(laukiama duomenų)':'';
 document.getElementById('bch').innerHTML=cc.map((c,i)=>`<div class="bc"><div class="bv">${evShow[i]>0?evShow[i].toFixed(3):'—'}</div><div class="bar" style="height:${evShow[i]>0?Math.max((evShow[i]/mx)*155,3):4}px;background:${evShow[i]>0?`linear-gradient(180deg,${bc[i]},${bc[i]}88)`:'var(--bg4)'};${evShow[i]===0?'border:1px dashed var(--brd2)':''}"></div><div class="bl">${c}</div></div>`).join('');
 
@@ -223,12 +340,10 @@ D.forEach(r=>{
   dt+=`<td class="nm ${dc}">${dltP!=null?(dltP>0?'+':'')+(dltP*100).toFixed(1)+'%':'—'}</td>`;
   dt+=`<td class="nm">${EM?ei('deEur',r.deEur):f(deD)}</td>`;
   dt+=`<td class="nm">${EM?ei('seEur',r.seEur):f(seD)}</td>`;
-  // Notes: in edit mode show failure reasons, otherwise just source list
   const notesParts=(r.notes||'').split('|');
   const srcPart=notesParts[0]||'';
   const missPart=notesParts[1]||'';
   if(EM&&missPart){
-    // Parse MISS:PL=NO_DATA,LT=TIMEOUT
     const reasons=missPart.replace('MISS:','').split(',').map(p=>{
       const [k,v]=p.split('=');
       const color=v==='TIMEOUT'||v==='PARSE_ERR'?'var(--red)':'var(--amber)';
@@ -259,16 +374,14 @@ wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 document.getElementById('sg').innerHTML=[
 {n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'Didmeninė kaina PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF protokolai',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'energy.ec.europa.eu (XLSX)',c:'#f59e0b',t:'Diesel kainos LT/LV/EE/DK/SE/FI — tiesiai iš EC ✅ Auto'},{n:'Elvis DE — Diesel',u:'energy.ec.europa.eu + fuel-prices.eu',c:'#a855f7',t:'Vokietijos Diesel vidurkis iš EC Oil Bulletin ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se/foretag/listpris',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR kursai ✅ Auto'}
 ].map(s=>`<div class="sc" style="border-left-color:${s.c}"><div class="sc-n">${s.n}</div><div class="sc-u">${s.u}</div><div class="sc-nt">${s.t}</div></div>`).join('')+
-`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p></div>`;
+`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p><p><strong>MECFS Toggle</strong> — 🇵🇱 PL pagal Orlen Lenkijos didmeninę kainą (PLN/1000L), 🇱🇹 LT pagal Orlen Lietuvos pardavimo kainą su PVM (EUR/l).</p></div>`;
 setTimeout(attachSpkEvents,0);}
 
-// Shared tooltip element
 const _tt=(()=>{const d=document.createElement('div');d.style.cssText='position:fixed;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--M,monospace);color:#f1f5f9;pointer-events:none;z-index:9999;opacity:0;transition:opacity .15s;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)';document.body.appendChild(d);return d;})();
 function _showTT(e,html){_tt.innerHTML=html;_tt.style.opacity='1';_moveTT(e);}
 function _moveTT(e){const x=e.clientX,y=e.clientY,w=_tt.offsetWidth;_tt.style.left=(x+14+w>window.innerWidth?x-w-10:x+14)+'px';_tt.style.top=(y-36)+'px';}
 function _hideTT(){_tt.style.opacity='0';}
 
-// sk: data = array of numbers OR {v,label} objects; color, w, h
 function sk(data,color,w,h){
   if(!data||data.length<2)return`<svg width="${w}" height="${h}" style="opacity:.3"><text x="${w/2}" y="${h/2+3}" text-anchor="middle" fill="#64748b" font-size="8">—</text></svg>`;
   const vals=data.map(d=>typeof d==='object'?d.v:d);
@@ -279,15 +392,13 @@ function sk(data,color,w,h){
   const pts=vals.map((v,i)=>`${px(i)},${py(v)}`).join(' ');
   const ly=py(vals[vals.length-1]);
   const uid='sk'+Math.random().toString(36).slice(2,7);
-  // invisible hit rects for each data point
   const hits=vals.map((v,i)=>{
-    const cx=px(i),cy=py(v),lbl=labels[i]?`<span style="color:#94a3b8">${labels[i]}</span><br/>`:'';
+    const cx=px(i),cy=py(v);
     return`<rect x="${Math.max(0,cx-w/vals.length/2)}" y="0" width="${w/vals.length}" height="${h}" fill="transparent" data-v="${v.toFixed(3)}" data-l="${labels[i]||''}" data-cx="${cx}" data-cy="${cy}" data-c="${color}"/>`;
   }).join('');
   return`<svg width="${w}" height="${h}" class="spk-svg" style="cursor:crosshair;overflow:visible"><defs><linearGradient id="g${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".2"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><polygon points="0,${h} ${pts} ${w},${h}" fill="url(#g${uid})"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${px(vals.length-1)}" cy="${ly}" r="2.5" fill="${color}"/><circle class="spk-dot" cx="-99" cy="-99" r="3.5" fill="${color}" stroke="#0a0e1a" stroke-width="1.5" style="pointer-events:none"/><line class="spk-vl" x1="-99" y1="0" x2="-99" y2="${h}" stroke="${color}" stroke-width="1" stroke-dasharray="2,2" opacity=".5" style="pointer-events:none"/>${hits}</svg>`;
 }
 
-// Attach tooltip events to sparklines after render
 function attachSpkEvents(){
   document.querySelectorAll('.spk-svg').forEach(svg=>{
     svg.querySelectorAll('rect[data-v]').forEach(rect=>{
@@ -325,11 +436,9 @@ async function saveToGitHub(){
   const ss=document.getElementById('saveStatus');
   ss.textContent='⏳ Saving...';ss.style.color='var(--amber)';
   try{
-    // 1. Get SHA of current file
     const meta=await fetch(GH_API,{headers:{'Authorization':`token ${tk}`,'Accept':'application/vnd.github.v3+json'}});
     if(!meta.ok){const e=await meta.json();throw new Error(e.message||`HTTP ${meta.status}`);}
     const sha=(await meta.json()).sha;
-    // 2. Build Excel from current D and W data
     const wb=XLSX.utils.book_new();
     const dH=[["Date","Day","PLN/m³","PLN/EUR","EUR/l","EUR/l","Δ EUR/l","Δ %","EUR/l","SEK/l","SEK/EUR","EUR/l","Notes","Freq"]];
     const dS=["","","ORLEN PL — EKODIESEL","","","ORLEN LT","Δ PL vs LT","","ELVIS DE","BSH / ST1 SE","","","",""];
@@ -339,7 +448,6 @@ async function saveToGitHub(){
     const wRows=[["📊  EU Weekly Oil Bulletin — Diesel Prices with Taxes"],["Source: energy.ec.europa.eu"],["Week Start","🇱🇹 LT","🇱🇻 LV","🇪🇪 EE","🇩🇰 DK","🇸🇪 SE","🇫🇮 FI","🇪🇺 EU Avg","LT vs EU Δ","Notes"]];
     W.forEach(r=>{const d=(r.LT&&r.EU)?((r.LT-r.EU)/r.EU):null;wRows.push([r.date,r.LT,r.LV,r.EE,r.DK,r.SE,r.FI,r.EU,d,'']);});
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(wRows),"Weekly Oil Bulletin");
-    // 3. Push to GitHub
     const content=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
     const push=await fetch(GH_API,{method:'PUT',headers:{'Authorization':`token ${tk}`,'Content-Type':'application/json'},
       body:JSON.stringify({message:`📊 Manual edit ${new Date().toISOString().split('T')[0]}`,content,sha,branch:'main'})});
@@ -355,14 +463,12 @@ async function runScraper(){
   const ss=document.getElementById('saveStatus');
   ss.textContent='🚀 Triggering scraper...';ss.style.color='var(--amber)';
   try{
-    // 1. Get workflow ID
     const wfRes=await fetch(`https://api.github.com/repos/${REPO}/actions/workflows`,{
       headers:{'Authorization':`token ${tk}`,'Accept':'application/vnd.github.v3+json'}});
     if(!wfRes.ok)throw new Error(`Workflows API: ${wfRes.status}`);
     const wfs=await wfRes.json();
     const wf=wfs.workflows.find(w=>w.name==='Fuel Price Tracker')||wfs.workflows[0];
     if(!wf)throw new Error('Workflow not found');
-    // 2. Dispatch
     const dispatch=await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${wf.id}/dispatches`,{
       method:'POST',
       headers:{'Authorization':`token ${tk}`,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'},
@@ -370,7 +476,6 @@ async function runScraper(){
     });
     if(!dispatch.ok){const e=await dispatch.json();throw new Error(e.message||`HTTP ${dispatch.status}`);}
     ss.textContent='✅ Scraper triggered! Data updates in ~1 min.';ss.style.color='var(--green)';
-    // Auto-refresh after 90 seconds
     setTimeout(()=>{ss.textContent='↻ Refreshing...';ss.style.color='var(--amber)';init();},90000);
     setTimeout(()=>{ss.textContent='';},120000);
   }catch(e){ss.textContent=`❌ ${e.message}`;ss.style.color='var(--red)';console.error(e);}
