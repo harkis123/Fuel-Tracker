@@ -1,5 +1,5 @@
 {
-  "date": "2026-04-29",
+  "date": "2026-04-30",
   "version": "v6.1",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,34 +13,34 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2478,
-      "SEK_EUR": 10.8485
+      "PLN_EUR": 4.2518,
+      "SEK_EUR": 10.8405
     },
     "orlen_pl": {
-      "price_pln_m3": 6311.0
+      "price_pln_m3": 6470.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.8448,
-      "price_eur_1000l_su_pvm": 1844.79,
-      "price_eur_1000l_be_pvm": 1524.62,
+      "price_eur_l": 1.8212,
+      "price_eur_1000l_su_pvm": 1821.17,
+      "price_eur_1000l_be_pvm": 1505.1,
       "diesel_class": "fallback"
     },
     "elvis_de": {
       "price_eur_l": 2.133
     },
     "bsh_se": {
-      "price_sek_l": 22.49
+      "price_sek_l": 22.34
     },
     "eu_bulletin": {
-      "LT": 2.0407,
-      "LV": 2.0062,
-      "EE": 1.878,
-      "DK": 2.2212,
-      "SE": 2.0171,
-      "FI": 2.2458,
-      "EU_AVG": 2.0077,
-      "DE": 2.133,
-      "_date": "2026-04-20"
+      "LT": 1.9899,
+      "LV": 1.9212,
+      "EE": 1.815,
+      "DK": 2.2348,
+      "SE": 2.0071,
+      "FI": 2.3372,
+      "EU_AVG": 1.9743,
+      "DE": 2.181,
+      "_date": "2026-04-27"
     }
   },
   "failures": {},
