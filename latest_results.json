@@ -1,5 +1,5 @@
 {
-  "date": "2026-04-30",
+  "date": "2026-05-01",
   "version": "v6.1",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,23 +13,23 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2518,
-      "SEK_EUR": 10.8405
+      "PLN_EUR": 4.2605,
+      "SEK_EUR": 10.8555
     },
     "orlen_pl": {
-      "price_pln_m3": 6470.0
+      "price_pln_m3": 6465.0
     },
     "orlen_lt": {
       "price_eur_l": 1.8212,
       "price_eur_1000l_su_pvm": 1821.17,
       "price_eur_1000l_be_pvm": 1505.1,
-      "diesel_class": "fallback"
+      "diesel_class": "Dyzelinas C kl"
     },
     "elvis_de": {
-      "price_eur_l": 2.133
+      "price_eur_l": 2.181
     },
     "bsh_se": {
-      "price_sek_l": 22.34
+      "price_sek_l": 23.04
     },
     "eu_bulletin": {
       "LT": 1.9899,
@@ -44,5 +44,5 @@
     }
   },
   "failures": {},
-  "diesel_class": "fallback"
+  "diesel_class": "Dyzelinas C kl"
 }
