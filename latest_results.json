@@ -1,5 +1,5 @@
 {
-  "date": "2026-05-01",
+  "date": "2026-05-04",
   "version": "v6.1",
   "sources_ok": 6,
   "sources_total": 6,
@@ -20,16 +20,16 @@
       "price_pln_m3": 6465.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.8212,
-      "price_eur_1000l_su_pvm": 1821.17,
-      "price_eur_1000l_be_pvm": 1505.1,
+      "price_eur_l": 1.8619,
+      "price_eur_1000l_su_pvm": 1861.92,
+      "price_eur_1000l_be_pvm": 1538.78,
       "diesel_class": "Dyzelinas C kl"
     },
     "elvis_de": {
       "price_eur_l": 2.181
     },
     "bsh_se": {
-      "price_sek_l": 23.04
+      "price_sek_l": 22.64
     },
     "eu_bulletin": {
       "LT": 1.9899,
