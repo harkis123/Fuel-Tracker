@@ -1,48 +1,47 @@
 {
-  "date": "2026-05-13",
+  "date": "2026-05-14",
   "version": "v6.1",
-  "sources_ok": 6,
+  "sources_ok": 5,
   "sources_total": 6,
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
     "elvis_de": true,
-    "bsh_se": true,
+    "bsh_se": false,
     "eu_bulletin": true
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.248,
-      "SEK_EUR": 10.8935
+      "PLN_EUR": 4.2513,
+      "SEK_EUR": 10.915
     },
     "orlen_pl": {
-      "price_pln_m3": 6112.0
+      "price_pln_m3": 6049.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.7555,
-      "price_eur_1000l_su_pvm": 1755.49,
-      "price_eur_1000l_be_pvm": 1450.82,
+      "price_eur_l": 1.7622,
+      "price_eur_1000l_su_pvm": 1762.22,
+      "price_eur_1000l_be_pvm": 1456.38,
       "diesel_class": "Dyzelinas C kl"
     },
     "elvis_de": {
       "price_eur_l": 2.088
     },
-    "bsh_se": {
-      "price_sek_l": 21.04
-    },
     "eu_bulletin": {
-      "LT": 2.0008,
-      "LV": 1.9212,
-      "EE": 1.866,
-      "DK": 2.3419,
-      "SE": 2.0528,
-      "FI": 2.3595,
-      "EU_AVG": 1.9753,
-      "DE": 2.088,
-      "_date": "2026-05-04"
+      "LT": 1.9624,
+      "LV": 1.9602,
+      "EE": 1.847,
+      "DK": 2.1947,
+      "SE": 1.8859,
+      "FI": 2.3677,
+      "EU_AVG": 1.9305,
+      "DE": 1.97,
+      "_date": "2026-05-11"
     }
   },
-  "failures": {},
+  "failures": {
+    "SE": "NO_DATA"
+  },
   "diesel_class": "Dyzelinas C kl"
 }
