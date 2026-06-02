@@ -89,7 +89,8 @@ const MECFS_PL_TABLE = [
 ];
 
 // LT MECFS lookup table: [price EUR/l (su PVM), surcharge %]
-// Source: Orlen LT pardavimo kaina su PVM
+// Source: EU Weekly Oil Bulletin LT diesel (su PVM) — see latestEuBulletinLT().
+// (NB: the "ORLEN LT" KPI/column is a separate wholesale series, not this index.)
 const MECFS_LT_TABLE = [
   [1.50,0.0],[1.53,0.5],[1.55,1.0],[1.58,1.5],[1.60,2.0],[1.63,2.5],
   [1.65,3.0],[1.68,3.5],[1.70,4.0],[1.73,4.5],[1.75,5.0],[1.78,5.5],
@@ -405,9 +406,9 @@ W.forEach(r=>{
 wt+=`</tbody></table>`;document.getElementById('wt').innerHTML=wt;
 
 document.getElementById('sg').innerHTML=[
-{n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'Didmeninė kaina PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas E',u:'orlenlietuva.lt PDF protokolai',c:'#06b6d4',t:'Pardavimo kaina su PVM EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'energy.ec.europa.eu (XLSX)',c:'#f59e0b',t:'Diesel kainos LT/LV/EE/DK/SE/FI — tiesiai iš EC ✅ Auto'},{n:'Elvis DE — Diesel',u:'energy.ec.europa.eu + fuel-prices.eu',c:'#a855f7',t:'Vokietijos Diesel vidurkis iš EC Oil Bulletin ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se/foretag/listpris',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR kursai ✅ Auto'}
+{n:'Orlen PL — Ekodiesel',u:'petrodom.pl',c:'#f97316',t:'Didmeninė kaina PLN/m³ ✅ Auto'},{n:'Orlen LT — Dyzelinas C/RRME',u:'orlenlietuva.lt PDF protokolai',c:'#06b6d4',t:'Pardavimo kaina su PVM, 1-as term. (Mažeikiai), EUR/1000l ✅ Auto'},{n:'EU Oil Bulletin',u:'energy.ec.europa.eu (XLSX)',c:'#f59e0b',t:'Diesel kainos LT/LV/EE/DK/SE/FI — tiesiai iš EC ✅ Auto'},{n:'Elvis DE — Diesel',u:'Tankerkönig (MTS-K) → EC Oil Bulletin',c:'#a855f7',t:'VK dyzelinas: Tankerkönig vidurkis (jei API raktas) arba EC biuletenis. Tikras ELVIS floateris — tik partneriams (BLUE.net) ✅ Auto'},{n:'BSH/ST1 SE',u:'st1.se/foretag/listpris',c:'#2dd4bf',t:'Diesel SEK/l ✅ Auto'},{n:'FX (ECB)',u:'frankfurter.app',c:'#3b82f6',t:'PLN/EUR + SEK/EUR kursai ✅ Auto'}
 ].map(s=>`<div class="sc" style="border-left-color:${s.c}"><div class="sc-n">${s.n}</div><div class="sc-u">${s.u}</div><div class="sc-nt">${s.t}</div></div>`).join('')+
-`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — daily 10:30 LT. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p><p><strong>MECFS Toggle</strong> — 🇵🇱 PL pagal Orlen Lenkijos didmeninę kainą (PLN/1000L), 🇱🇹 LT pagal Orlen Lietuvos pardavimo kainą su PVM (EUR/l).</p></div>`;
+`<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — kasdien ~16:00 LT (13:00 UTC), Pr–Pn. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p><p><strong>MECFS Toggle</strong> — 🇵🇱 PL pagal Orlen Lenkijos didmeninę kainą (PLN/1000L), 🇱🇹 LT pagal EU Oil Bulletin LT dyzelino kainą su PVM (EUR/l).</p></div>`;
 setTimeout(attachSpkEvents,0);}
 
 const _tt=(()=>{const d=document.createElement('div');d.style.cssText='position:fixed;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--M,monospace);color:#f1f5f9;pointer-events:none;z-index:9999;opacity:0;transition:opacity .15s;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)';document.body.appendChild(d);return d;})();

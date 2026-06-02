@@ -2,7 +2,9 @@ name: Fuel Price Tracker
 
 on:
   schedule:
-    - cron: '30 8 * * 1-5'
+    # 13:00 UTC ≈ 16:00 LT — run AFTER Orlen LT publishes the day's PDF
+    # (the old 08:30 UTC run grabbed the previous day's PDF → off-by-one).
+    - cron: '0 13 * * 1-5'
   workflow_dispatch:
     inputs:
       backfill:
@@ -31,6 +33,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          python -m pytest tests/ -q
 
       - name: Run backfill (if selected)
         if: ${{ github.event.inputs.backfill == 'true' }}

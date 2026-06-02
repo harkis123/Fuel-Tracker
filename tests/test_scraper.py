@@ -14,10 +14,12 @@ from config import (
     DIESEL_EUR_MIN,
     FX_PLN_EUR_MAX,
     FX_PLN_EUR_MIN,
+    FX_SEK_EUR_MAX,
+    FX_SEK_EUR_MIN,
     ORLEN_PL_MAX,
     ORLEN_PL_MIN,
 )
-from scraper import clean_num, validate_fx, validate_price_change
+from scraper import clean_num, validate_fx, validate_price_change, _find_orlen_lt_prices
 
 
 class TestCleanNum:
@@ -125,3 +127,34 @@ class TestPriceRanges:
     def test_fx_ranges(self):
         assert FX_PLN_EUR_MIN > 0
         assert FX_PLN_EUR_MAX > FX_PLN_EUR_MIN
+
+
+# Real 2026-06-01 PDF excerpt: 2 road-diesel terminals + agri/marine decoys
+ORLEN_LT_SAMPLE = (
+    "Kainos galioja nuo 2026-06-01 9:00 val\n"
+    "Dyzelinas C kl. su RRME 836.77 503.60 1 340.37 281.48 1 621.85\n"
+    "Dyzelinas žemės ūkiui C kl. su RRME 836.77 35.00 871.77 183.07 1 054.84\n"
+    "Dyzelinas laivų atsargoms C kl. su RRME 836.77 0.00 836.77 175.72 1 012.49\n"
+    "Dyzelinas C kl. su RRME 841.44 503.60 1 345.04 282.46 1 627.50\n"
+)
+
+
+class TestOrlenLTParser:
+    def test_selects_gross_su_pvm_first_terminal(self):
+        r = _find_orlen_lt_prices(ORLEN_LT_SAMPLE)
+        assert r is not None
+        assert r["price_eur_1000l_su_pvm"] == 1621.85   # 5th column, terminal 0
+        assert r["price_eur_1000l_be_pvm"] == 1340.37    # 3rd column (net)
+        assert abs(r["price_eur_l"] - 1.6219) < 0.0005
+
+    def test_excludes_agri_and_marine(self):
+        r = _find_orlen_lt_prices(ORLEN_LT_SAMPLE)
+        # must never pick the cheaper agri (1054.84) or marine (1012.49) lines
+        assert r["price_eur_1000l_su_pvm"] not in (1054.84, 1012.49)
+
+    def test_extracts_pdf_date(self):
+        r = _find_orlen_lt_prices(ORLEN_LT_SAMPLE)
+        assert r["pdf_date"] == "2026-06-01"
+
+    def test_no_match_returns_none(self):
+        assert _find_orlen_lt_prices("Automobilinis 95 benzinas 700.00 1 200.00") is None

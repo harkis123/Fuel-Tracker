@@ -4,18 +4,25 @@ Automatinis kuro kainų sekimas iš 6 šaltinių. Veikia per GitHub Actions — 
 
 ## Ką daro
 
-Kas darbo dieną 10:30 LT laiku automatiškai:
+Kas darbo dieną ~16:00 LT (13:00 UTC) laiku automatiškai:
 
 | Šaltinis | Duomenys | Dažnumas |
 |----------|----------|----------|
 | ECB (frankfurter.app) | PLN/EUR, SEK/EUR kursai | Kasdien |
 | Orlen PL | Ekodiesel hurtinė kaina PLN/m³ | Kasdien |
-| Orlen LT | Dyzelinas E su PVM, EUR/l | Kasdien |
-| mehr-tanken.de | Elvis FSC Diesel DE, EUR/l | Kasdien |
+| Orlen LT | Dyzelinas C/RRME, **pardavimo kaina su PVM** (1-as term., Mažeikiai), EUR/l | Kasdien |
+| Tankerkönig → EC Bulletin | VK dyzelinas (ELVIS DE proxy), EUR/l | Kasdien |
 | ST1.se | BSH/ST1 Diesel SE, SEK/l | Kasdien |
-| EC Oil Bulletin | LT/LV/EE/DK/SE/FI diesel kainos | Pirmadienis |
+| EC Oil Bulletin | LT/LV/EE/DK/SE/FI diesel kainos | Savaitinis |
 
 Surinkti duomenys automatiškai įrašomi į `fuel_tracker.xlsx` ir commit'inami atgal į repo.
+
+### Pastabos dėl šaltinių
+
+- **Orlen LT** — imama „Pardavimo kaina su PVM" (5-as PDF stulpelis), tik kelių dyzelinas `Dyzelinas … su RRME` (žemės ūkio / laivų / krosnių eilutės atmetamos), 1-as terminalas (Mažeikiai). Scraper'is tikrina PDF vidinę datą („galioja nuo"): jei šiandienos PDF dar nepaskelbtas, reikšmė įrašoma į **tikros PDF datos** eilutę (taip išvengiama anksčiau buvusio „off-by-one"). Be/su PVM pasirenkama `config.py` → `ORLEN_LT_PRICE_COL`.
+- **ELVIS DE** — tikras ELVIS Dieselfloater yra **tik partneriams** (BLUE.net), viešai neskelbiamas. Kaip viešas pakaitalas naudojamas **Tankerkönig** (oficialūs MTS-K degalinių dyzelino duomenys) — reikia nemokamo API rakto kaip GitHub Secret `TANKERKOENIG_API_KEY` (gauti: https://creativecommons.tankerkoenig.de/). Jei rakto nėra, naudojama EC Oil Bulletin Vokietijos dyzelino kaina.
+- **Outlier apsauga** — jei kaina pasikeičia >15 % per dieną (`config.py` → `MAX_DAILY_CHANGE_PCT`), reikšmė vis tiek įrašoma, bet pažymima `SUSP:` Notes stulpelyje.
+- **Istorijos taisymas** — `python src/backfill.py` (arba Actions → Run workflow → backfill=true) iš naujo atkuria teisingą Orlen LT kiekvienai datai pagal jos pačios PDF.
 
 ## Pradžia (setup ~5 min)
 
@@ -66,14 +73,14 @@ Kad Excel automatiškai atsinaujintų SharePoint'e, yra keli variantai:
 ## Kaip veikia
 
 ```
-GitHub Actions (cron: 08:30 UTC, Mon-Fri)
+GitHub Actions (cron: 13:00 UTC ≈ 16:00 LT, Mon-Fri)
     │
     ├─→ Fetch FX rates (frankfurter.app API)
-    ├─→ Scrape Orlen PL (orlen.pl)
-    ├─→ Scrape Orlen LT (orlenlietuva.lt)
-    ├─→ Scrape Elvis DE (mehr-tanken.de)
+    ├─→ Scrape Orlen PL (petrodom.pl)
+    ├─→ Scrape Orlen LT (orlenlietuva.lt — PDF data tikrinama)
+    ├─→ Fetch DE diesel (Tankerkönig/MTS-K → EC Bulletin)
     ├─→ Scrape BSH/ST1 SE (st1.se)
-    ├─→ [Mondays] Fetch EU Oil Bulletin (energy.ec.europa.eu)
+    ├─→ Fetch EU Oil Bulletin (energy.ec.europa.eu, savaitinis)
     │
     ├─→ Write all data to fuel_tracker.xlsx
     └─→ Git commit + push
