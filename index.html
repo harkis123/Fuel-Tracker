@@ -104,7 +104,7 @@ const VAT={LT:1.21,PL:1.23,DE:1.19,SE:1.25,LV:1.21,EE:1.24,DK:1.25,FI:1.255,EU:1
 const SHOW_VAT={dash:true,daily:true,weekly:true};
 function exVat(v,rate){return v!=null?v/rate:null;}
 function applyVat(v,rate,showVat){return showVat?v:exVat(v,rate);}
-function vatToggleHtml(tab){const on=SHOW_VAT[tab];return`<div style="display:flex;align-items:center;gap:6px;font-size:10px"><span style="color:var(--t5)">Kaina:</span><button onclick="toggleVat('${tab}')" style="display:flex;background:var(--bg4);border:1px solid var(--brd2);border-radius:20px;padding:2px;cursor:pointer;gap:2px"><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${on?'background:var(--bg2);color:var(--t1);box-shadow:none}">su PVM</span><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${!on?'background:var(--blue);color:#fff;box-shadow:none}">be PVM</span></button></div>`;}
+function vatToggleHtml(tab){const on=SHOW_VAT[tab];return`<div style="display:flex;align-items:center;gap:6px;font-size:10px"><span style="color:var(--t5)">Kaina:</span><button onclick="toggleVat('${tab}')" style="display:flex;background:var(--bg4);border:1px solid var(--brd2);border-radius:20px;padding:2px;cursor:pointer;gap:2px"><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${on?'background:var(--bg2);color:var(--t1);box-shadow:none':'color:var(--t5)'}">su PVM</span><span style="padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;font-family:var(--F);transition:.2s;${!on?'background:var(--blue);color:#fff;box-shadow:none':'color:var(--t5)'}">be PVM</span></button></div>`;}
 function toggleVat(tab){SHOW_VAT[tab]=!SHOW_VAT[tab];render();}
 function setMecfsMode(m){MECFS_MODE=m;localStorage.setItem('mecfs_mode',m);render();}
 
@@ -411,7 +411,7 @@ document.getElementById('sg').innerHTML=[
 `<div class="ib"><h4>🤖 Automation</h4><p><strong>GitHub Actions</strong> — kasdien ~16:00 LT (13:00 UTC), Pr–Pn. Scraper → Excel → commit.</p><p><strong>Edit Mode</strong> — 🔒 Edit → password + GitHub token → redaguok kainas ir datas → ☁️ Save to GitHub.</p><p><strong>MECFS Toggle</strong> — 🇵🇱 PL pagal Orlen Lenkijos didmeninę kainą (PLN/1000L), 🇱🇹 LT pagal EU Oil Bulletin LT dyzelino kainą su PVM (EUR/l).</p></div>`;
 setTimeout(attachSpkEvents,0);}
 
-const _tt=(()=>{const d=document.createElement('div');d.style.cssText='position:fixed;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--M,monospace);color:#f1f5f9;pointer-events:none;z-index:9999;opacity:0;transition:opacity .15s;white-space:nowrap;box-shadow:none;document.body.appendChild(d);return d;})();
+const _tt=(()=>{const d=document.createElement('div');d.style.cssText='position:fixed;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--M,monospace);color:#f1f5f9;pointer-events:none;z-index:9999;opacity:0;transition:opacity .15s;white-space:nowrap;box-shadow:none';document.body.appendChild(d);return d;})();
 function _showTT(e,html){_tt.innerHTML=html;_tt.style.opacity='1';_moveTT(e);}
 function _moveTT(e){const x=e.clientX,y=e.clientY,w=_tt.offsetWidth;_tt.style.left=(x+14+w>window.innerWidth?x-w-10:x+14)+'px';_tt.style.top=(y-36)+'px';}
 function _hideTT(){_tt.style.opacity='0';}
