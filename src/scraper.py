@@ -343,12 +343,23 @@ def fetch_elvis_de():
                 r.raise_for_status()
                 d = r.json()
                 if not d.get("ok"):
-                    log("Elvis DE", f"Tankerkönig {name}: {d.get('message','not ok')}", "WARN")
+                    log("Elvis DE", f"Tankerkönig {name}: ok=false status={d.get('status')} msg={d.get('message')}", "WARN")
                     continue
-                vals = [s["price"] for s in d.get("stations", [])
-                        if isinstance(s.get("price"), (int, float)) and s["price"] > 0]
+                stations = d.get("stations", [])
+                if name == cfg.TANKERKOENIG_CITIES[0][0]:
+                    s0 = stations[0] if stations else None
+                    log("Elvis DE", f"{name}: {len(stations)} stations; keys={sorted(s0.keys()) if s0 else None}; price={s0.get('price') if s0 else None} diesel={s0.get('diesel') if s0 else None}")
+                vals = []
+                for s in stations:
+                    p = s.get("price")
+                    if isinstance(p, bool) or not isinstance(p, (int, float)):
+                        p = s.get("diesel")
+                    if isinstance(p, (int, float)) and not isinstance(p, bool) and p > 0:
+                        vals.append(p)
                 if vals:
                     city_avgs.append(sum(vals) / len(vals))
+                else:
+                    log("Elvis DE", f"{name}: ok but 0 usable diesel prices ({len(stations)} stations)", "WARN")
             except Exception as e:
                 log("Elvis DE", f"Tankerkönig {name} failed: {e}", "WARN")
         if city_avgs:
