@@ -44,6 +44,8 @@ jobs:
         run: python src/backfill.py
 
       - name: Run daily scraper
+        env:
+          TANKERKOENIG_API_KEY: ${{ secrets.TANKERKOENIG_API_KEY }}
         run: python src/scraper.py
 
       - name: Commit and push
