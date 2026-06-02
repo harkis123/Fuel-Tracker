@@ -345,8 +345,8 @@ def fetch_elvis_de():
                 if not d.get("ok"):
                     log("Elvis DE", f"Tankerkönig {name}: {d.get('message','not ok')}", "WARN")
                     continue
-                vals = [s["diesel"] for s in d.get("stations", [])
-                        if isinstance(s.get("diesel"), (int, float)) and s["diesel"] > 0]
+                vals = [s["price"] for s in d.get("stations", [])
+                        if isinstance(s.get("price"), (int, float)) and s["price"] > 0]
                 if vals:
                     city_avgs.append(sum(vals) / len(vals))
             except Exception as e:
