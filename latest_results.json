@@ -1,13 +1,13 @@
 {
   "date": "2026-06-02",
   "version": "v7",
-  "sources_ok": 5,
+  "sources_ok": 6,
   "sources_total": 6,
   "results": {
     "fx": true,
     "orlen_pl": true,
     "orlen_lt": true,
-    "elvis_de": false,
+    "elvis_de": true,
     "bsh_se": true,
     "eu_bulletin": true
   },
@@ -25,6 +25,10 @@
       "price_eur_1000l_be_pvm": 1340.37,
       "diesel_class": "Dyzelinas C kl",
       "pdf_date": "2026-06-01"
+    },
+    "elvis_de": {
+      "price_eur_l": 1.8527,
+      "source": "tankerkoenig"
     },
     "bsh_se": {
       "price_sek_l": 19.74
