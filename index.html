@@ -129,6 +129,7 @@ function onEditW(dt,fld,el){
 }
 function saveEdits(){downloadExcel();cancelEdit();}
 
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 async function init(){
 const dot=document.getElementById('dot'),st=document.getElementById('st'),ub=document.getElementById('ub');
 dot.className='dot loading';st.textContent='Fetching...';
@@ -141,7 +142,7 @@ const raw=XLSX.utils.sheet_to_json(wb.Sheets['Daily Tracker'],{header:1,defval:n
 let hi=0;for(let i=0;i<10;i++){if(raw[i]&&raw[i][0]==='Date'){hi=i;break;}}
 let all=[];
 for(let i=hi+1;i<raw.length;i++){const r=raw[i];if(!r||!r[0])continue;
-const dt=r[0] instanceof Date?r[0].toISOString().split('T')[0]:String(r[0]).substring(0,10);
+const dt=r[0] instanceof Date?ymd(r[0]):String(r[0]).substring(0,10);
 if(!dt||dt.length<8)continue;
 all.push({date:dt,day:r[1]||'',plnM3:nn(r[2]),plnEur:nn(r[3]),plEur:nn(r[4]),ltEur:nn(r[5]),delta:nn(r[6]),deltaPct:nn(r[7]),deEur:nn(r[8]),seSek:nn(r[9]),sekEur:nn(r[10]),seEur:nn(r[11]),notes:r[12]||''});}
 const bd={};all.forEach(r=>{const c=[r.ltEur,r.plEur,r.deEur,r.seEur,r.plnM3].filter(v=>v!=null).length;if(!bd[r.date]||c>bd[r.date].c)bd[r.date]={r,c};});
@@ -151,7 +152,7 @@ if(wb.SheetNames.includes('Weekly Oil Bulletin')){
 const raw=XLSX.utils.sheet_to_json(wb.Sheets['Weekly Oil Bulletin'],{header:1,defval:null});
 let hi=0;for(let i=0;i<15;i++){if(!raw[i])continue;const v=String(raw[i][0]||'').toLowerCase();if(v.includes('week')||v.includes('data')||v.includes('date')){hi=i;break;}if(raw[i][0] instanceof Date){hi=Math.max(0,i-1);break;}}
 let aw=[];for(let i=hi+1;i<raw.length;i++){const r=raw[i];if(!r||!r[0])continue;
-let dt='';if(r[0] instanceof Date){dt=r[0].toISOString().split('T')[0];}else{const s=String(r[0]).substring(0,10);if(/\d{4}-\d{2}-\d{2}/.test(s))dt=s;else continue;}
+let dt='';if(r[0] instanceof Date){dt=ymd(r[0]);}else{const s=String(r[0]).substring(0,10);if(/\d{4}-\d{2}-\d{2}/.test(s))dt=s;else continue;}
 if(!dt||dt.length<10)continue;
 aw.push({date:dt,LT:nn(r[1]),LV:nn(r[2]),EE:nn(r[3]),DK:nn(r[4]),SE:nn(r[5]),FI:nn(r[6]),EU:nn(r[7])});}
 const bw={};aw.forEach(r=>{const c=[r.LT,r.LV,r.EE,r.DK,r.SE,r.FI].filter(v=>v!=null).length;if(!bw[r.date]||c>bw[r.date].c)bw[r.date]={r,c};});
