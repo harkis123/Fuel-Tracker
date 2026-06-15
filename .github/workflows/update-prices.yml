@@ -2,8 +2,8 @@ name: Fuel Price Tracker
 
 on:
   schedule:
-    # 13:00 UTC ≈ 16:00 LT — run AFTER Orlen LT publishes the day's PDF
-    # (the old 08:30 UTC run grabbed the previous day's PDF → off-by-one).
+    # 13:00 UTC ~ 16:00 LT - run AFTER Orlen LT publishes the day's PDF
+    # (the old 08:30 UTC run grabbed the previous day's PDF -> off-by-one).
     - cron: '0 13 * * 1-5'
   workflow_dispatch:
     inputs:
@@ -18,6 +18,12 @@ on:
 
 permissions:
   contents: write
+
+# Serialize runs so a manual workflow_dispatch (e.g. a backfill) can never
+# race the scheduled run and produce competing commits on main.
+concurrency:
+  group: fuel-tracker-update
+  cancel-in-progress: false
 
 jobs:
   update-prices:
@@ -52,7 +58,30 @@ jobs:
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "Fuel Tracker Bot"
+
           git add fuel_tracker.xlsx latest_results.json
-          git diff --staged --quiet || git commit -m "📊 Update $(date +%Y-%m-%d)"
-          git pull --rebase origin main
-          git push
+          if git diff --staged --quiet; then
+            echo "Nothing changed - skipping commit."
+            exit 0
+          fi
+          git commit -m "Update $(date +%Y-%m-%d)"
+
+          # fuel_tracker.xlsx is binary (git can't 3-way merge it) and
+          # latest_results.json is regenerated whole, so on any conflict we
+          # always keep THIS run's freshly generated files. During a rebase,
+          # "theirs" = the commit being replayed = ours. Unrelated remote
+          # changes (e.g. edits to index.html) are still merged in normally.
+          # Retry handles the case where the remote moves between fetch and push.
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase -X theirs origin/main && git push origin HEAD:main; then
+              echo "Pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Attempt $attempt lost a push race - retrying."
+            git rebase --abort 2>/dev/null || true
+            sleep $(( (RANDOM % 5) + 3 ))
+          done
+
+          echo "::error::Could not push after 5 attempts."
+          exit 1
