@@ -1,5 +1,5 @@
 {
-  "date": "2026-06-25",
+  "date": "2026-06-26",
   "version": "v7",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,21 +13,21 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2875,
-      "SEK_EUR": 11.069
+      "PLN_EUR": 4.2868,
+      "SEK_EUR": 11.0775
     },
     "orlen_pl": {
-      "price_pln_m3": 5370.0
+      "price_pln_m3": 5414.0
     },
     "orlen_lt": {
-      "price_eur_l": 1.597,
-      "price_eur_1000l_su_pvm": 1597.01,
-      "price_eur_1000l_be_pvm": 1319.84,
+      "price_eur_l": 1.6005,
+      "price_eur_1000l_su_pvm": 1600.54,
+      "price_eur_1000l_be_pvm": 1322.76,
       "diesel_class": "Dyzelinas C kl",
-      "pdf_date": "2026-06-23"
+      "pdf_date": "2026-06-25"
     },
     "elvis_de": {
-      "price_eur_l": 1.7341,
+      "price_eur_l": 1.7582,
       "source": "tankerkoenig"
     },
     "bsh_se": {
