@@ -1,5 +1,5 @@
 {
-  "date": "2026-07-03",
+  "date": "2026-07-06",
   "version": "v7",
   "sources_ok": 6,
   "sources_total": 6,
@@ -13,11 +13,11 @@
   },
   "data": {
     "fx": {
-      "PLN_EUR": 4.2848,
-      "SEK_EUR": 11.0315
+      "PLN_EUR": 4.2883,
+      "SEK_EUR": 11.015
     },
     "orlen_pl": {
-      "price_pln_m3": 5508.0
+      "price_pln_m3": 5513.0
     },
     "orlen_lt": {
       "price_eur_l": 1.6175,
@@ -27,11 +27,11 @@
       "pdf_date": "2026-07-02"
     },
     "elvis_de": {
-      "price_eur_l": 1.9749,
+      "price_eur_l": 1.9436,
       "source": "tankerkoenig"
     },
     "bsh_se": {
-      "price_sek_l": 16.29
+      "price_sek_l": 16.64
     },
     "eu_bulletin": {
       "LT": 1.7388,
